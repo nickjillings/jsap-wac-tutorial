@@ -1,0 +1,102 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+
+\usepackage[utf8]{inputenc}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,shapes.arrows,decorations.pathmorphing}
+\usetikzlibrary{matrix,chains,scopes,positioning,arrows,fit}
+\usepackage{varwidth}
+
+\usepackage{multicol}
+
+\usepackage{listings}
+\usepackage{color}
+\definecolor{lightgray}{rgb}{.9,.9,.9}
+\definecolor{darkgray}{rgb}{.4,.4,.4}
+\definecolor{purple}{rgb}{0.65, 0.12, 0.82}
+\lstdefinelanguage{JavaScript}{
+  keywords={break, case, catch, continue, debugger, default, delete, do, else, false, finally, for, function, if, in, instanceof, new, null, return, switch, this, throw, true, try, typeof, var, void, while, with},
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]',
+  morestring=[b]",
+  ndkeywords={class, export, boolean, throw, implements, import, this},
+  keywordstyle=\color{blue}\bfseries,
+  ndkeywordstyle=\color{darkgray}\bfseries,
+  identifierstyle=\color{black},
+  commentstyle=\color{purple}\ttfamily,
+  stringstyle=\color{red}\ttfamily,
+  sensitive=true
+}
+
+\lstset{
+   language=JavaScript,
+   backgroundcolor=\color{white},
+   extendedchars=true,
+   basicstyle=\footnotesize\ttfamily,
+   showstringspaces=false,
+   showspaces=false,
+   tabsize=2,
+   breaklines=true,
+   showtabs=false,
+   captionpos=b
+}
+ 
+%Information to be included in the title page:
+\title[JSAP]{JSAP Tutorial: Build and deploy web audio effects}
+ 
+\author[Jillings and Stables]% (optional, for multiple authors)
+{Nicholas Jillings \and Ryan Stables}
+ 
+\institute[BCU]
+{
+  Digital Media Technology Lab\\
+  Birmingham City University\\
+  Curzon Street, Birmingham, UK
+}
+ 
+\date[WAC 2017] % (optional)
+{3rd Web Audio Conference (WAC-2017), August 21--23, 2017}
+
+\begin{document}
+ 
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Introduction}
+
+Aims of this tutorial:
+\begin{itemize}
+\item Learn how the JSAP standard works
+\item How to deploy JSAP into your projects
+\item Build your first JSAP plugin (start thinking of ideas).
+\item Learn how to load plugins into the host and operate
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{JSAP Overview}
+Each JSAP plugin is made up of several objects:
+\begin{itemize}
+\item \texttt{BasePlugin} - The inherited object which defines every required interaction of the JSAP instance.
+\begin{itemize}
+\item \texttt{ParameterManager} - Built and accessed as \texttt{this.parameters}, holds all the constructors for parameters and interface for manipulating them.
+\item \texttt{PluginFeatureInterface} - Allows for sharing of audio features between plugins (not going to cover today).
+\item \texttt{PluginUserInterface} - For building of plugin GUI. Can hold several suitable options and interfaces.
+\end{itemize}
+\end{itemize}
+These are all built for you on construction.
+\end{frame}
+
+\begin{frame}
+\frametitle{Get JSAP}
+Please clone the following GitHub resource:\\
+\url{https://github.com/nickjillings/jsap-wac-tutorial}\\
+This will give you the latest JSAP, jsap-plugins and jsap-sandbox environments.\\
+Then open the file \texttt{helloworld.js} in your editor.\\
+\end{frame}
+
+
+\end{document}
