@@ -1,0 +1,24 @@
+engines:
+  duplication:
+    enabled: true
+    config:
+      languages:
+        javascript:
+            mass_threshold: 150
+    checks:
+      Similar code:
+        enabled: true
+  eslint:
+    enabled: true
+    checks:
+      complexity:
+        enabled: true
+        max: 20
+  fixme:
+    enabled: true
+ratings:
+  paths:
+  - "modules/*.js"
+exclude_paths:
+- "jsXtract.min.js"
+- "modules/chroma/*.json"
