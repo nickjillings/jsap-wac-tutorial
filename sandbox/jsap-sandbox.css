@@ -1,0 +1,172 @@
+body {
+    background-color: lightsalmon;
+}
+.empty {
+    width: inherit;
+    height: inherit;
+}
+#media-frame {
+    height: 250px;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+}
+#media-holder {
+    width: 500px;
+    height: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid;
+    border-radius: 5px;
+    padding: 3px;
+    box-shadow: -8px -8px 30px -4px rgba(0, 0, 0, 1);
+    background-color: white;
+}
+#media-content-holder {
+    width: 100%;
+    height: 160px;
+}
+#upload-file {
+    border: 5px dashed gray;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+#file-player {
+    width: inherit;
+    height: inherit;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    text-align: center;
+    align-items: center;
+    padding: 5px;
+}
+#file-waveform-holder {
+    width: 450px;
+    height: 100px;
+    border: 1px solid lightgray;
+}
+#file-waveform {
+    width: 450px;
+    height: 100px;
+}
+#export {
+    text-align: center;
+}
+#plugin-frame {
+    margin: 20px;
+    height: 290px;
+    box-shadow: inset 3px 5px 21px -4px rgba(0, 0, 0, 1);
+    padding: 15px;
+    border: 1px solid black;
+    border-radius: 20px;
+    background-color: white;
+    overflow-x: scroll;
+    overflow-y: hidden;
+}
+#plugin-holder {
+    height: 250px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+}
+#add-plugin {
+    width: 250px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+}
+#add-plugin-holder {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    border: 2px dashed;
+    color: lightgray;
+}
+#add-plugin-holder:hover {
+    color: black;
+    cursor: pointer;
+}
+.plugin-entry-holder {
+    min-width: 250px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    border: 1px solid black;
+    margin: 0px 10px;
+    background-color: lightblue;
+}
+.plugin-entry-title {
+    display: flex;
+    justify-content: space-between;
+    background-color: black;
+    color: white;
+    text-align: center;
+}
+.plugin-entry-parameter-holder {
+    display: flex;
+    flex-direction: row;
+    align-content: center;
+    text-align: center;
+    flex-wrap: wrap;
+}
+.plugin-parameter {
+    border-bottom: 1px solid gray;
+    padding: 5px;
+    width: 240px;
+}
+.plugin-parameter-input {
+    display: flex;
+    line-height: 18px;
+}
+.plugin-parameter-input > input[type=number] {
+    width: 50px;
+    line-height: 18px;
+}
+.plugin-parameter-input > input[type=range] {
+    width: 190px;
+    line-height: 18px;
+}
+#add-plugin-list {
+    overflow-y: scroll;
+    padding: 2px;
+    color: black;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    border: 2px solid black;
+}
+.plugin-proto {
+    border-bottom: 1px dashed black;
+    padding: 10px;
+}
+.plugin-proto:hover {
+    cursor: pointer;
+    background-color: rgb(200, 200, 200);
+}
+
+.plugin-meter {
+    width: 12px;
+    height: 250px;
+    padding-top: 24px;
+    margin: 0px 5px;
+}
+.plugin-meter > canvas {
+    width: 10px;
+    height: 200px;
+    border: 1px solid black;
+}

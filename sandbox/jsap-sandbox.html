@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>JSAP Sandbox</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta name="description" content="JSAP Sandbox" />
+    <meta name="author" content="Nicholas Jillings & Birmingham City University" />
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous" />
+    <link rel="stylesheet" href="jsap-sandbox.css" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js" integrity="sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS" crossorigin="anonymous"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.8/angular.min.js"></script>
+    <script src="../jsap/jsap.js"></script>
+    <script src="jsap-sandbox.js"></script>
+</head>
+
+<body ng-app="sandbox" ng-controller="window">
+    <h1>JSAP Sandbox</h1>
+    <div id="media-frame">
+        <div id="media-holder" ng-controller="media" ng-init="source='file'">
+            <div id="media-selector">
+                <div class="btn-group btn-group-justified" role="group" aria-label="...">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-default" ng-class="{'active' : source=='file'}" ng-click="source = 'file'"><span class="glyphicon glyphicon-file" aria-hidden="true"></span><span>From Files</span></button>
+                    </div>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-default" ng-class="{'active' : source=='input'}" ng-click="source = 'input'"><span class="glyphicon glyphicon-bullhorn" aria-hidden="true"></span><span>Record Input</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="media-content-holder" ng-switch on="source">
+                <div ng-switch-when="file" class="empty">
+                    <div class="empty" ng-switch on="decodeState">
+                        <div id="file-player" ng-switch-when="ok" ng-controller="filePlayer" class="empty">
+                            <div id="file-waveform-holder">
+                                <canvas id="file-waveform" width="450" height="100">
+                                </canvas>
+                            </div>
+                            <div>
+                                <div class="btn-group" role="group" aria-label="...">
+                                    <button type="button" class="btn btn-default" ng-class="{'playing':'active'}[playState]" ng-click="playClicked($event);"><span class="glyphicon" ng-class="{'playing': 'glyphicon-stop', 'stopped': 'glyphicon-play'}[playState]" aria-hidden="true"></span><span ng-show="playState == 'stopped'">Play</span><span ng-show="playState == 'playing'">Stop</span></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="upload-file" ng-switch-default ng-dragover="dragover($event);" ng-dragleave="dragleave($event);" ng-drop="dragdrop($event);">
+                            <h2 class="glyphicon" ng-class="{'empty': 'glyphicon-upload', 'decoding' : 'glyphicon-hourglass', 'ok' : 'glyphicon-ok', 'error' : 'glyphicon-remove' }[decodeState]" aria-hidden="true"></h2>
+                            <div>
+                                <h3>{{decodeMessage}}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div ng-switch-when="input" class="empty">
+                    <h2>In progress...</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="export" ng-controller="render" ng-init="state = 'ready'" ng-switch on="state" style="visibility:hidden">
+        <div class="btn-group" role="group" ng-switch-when="ready">
+            <button type="button" class="btn btn-default" ng-click="beginRendering($event);"><span class="glyphicon glyphicon-cd" aria-hidden="true"></span><span>Export as .WAV</span></button>
+        </div>
+        <div class="empty" ng-switch-when="inprogress">
+            <span class="glyphicon glyphicon-hourglass" aria-hidden="true"></span><span>Rendering...</span>
+        </div>
+        <div class="empty" ng-switch-when="error">
+            <span class="glyphicon glyphicon-remove" aria-hidden="true"></span><span>Sorry, there was a problem rendering</span>
+        </div>
+        <div class="empty" ng-switch-when="ok">
+            <span class="glyphicon glyphicon-ok" aria-hidden="true"></span><span>Your file is ready!</span>
+        </div>
+    </div>
+    <div id="plugin-frame">
+        <div id="plugin-holder" ng-controller="plugins" style="width: {{framewidth}}px">
+            <div class="plugin-meter" ng-controller="meter" ng-init="analyser = inputAnalyser">
+                <canvas width=10 height=200 />
+            </div>
+            <div class="plugin-entry-holder" ng-repeat="node in pluginList" ng-controller="pluginInstance" ng-init="plugin = node.node" style="max-width: {{width}}px">
+                <div class="plugin-entry-title">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span><span>Collapse</span></button>
+                    </div>
+                    <h4>{{plugin.name}}</h4>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-default btn-xs" ng-click="removePlugin($event);"><span class="glyphicon glyphicon-remove" aria-hidden="true"></span><span>Delete</span></button>
+                    </div>
+                </div>
+                <div class="plugin-entry-parameter-holder">
+                    <div class="plugin-parameter" ng-repeat="parameter in params" ng-controller="parameterInterface">
+                        <span>{{parameter.name}}</span>
+                        <div class="plugin-parameter-input">
+                            <input type="number" min="{{parameter.minimum}}" max="{{parameter.maximum}}" step="{{step}}" ng-model="parameter.value" />
+                            <input type="range" min="{{parameter.minimum}}" max="{{parameter.maximum}}" step="{{step}}" ng-model="parameter.value" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="plugin-meter" ng-controller="meter" ng-init="analyser = outputAnalyser">
+                <canvas width=10 height=200 />
+            </div>
+            <div id="add-plugin" ng-click="addPlugin($event);" ng-switch on="showPluginList">
+                <div id="add-plugin-holder" class="empty" ng-switch-when="false" style="font-size:2em">
+                    <span class="glyphicon glyphicon-plus" aria-hidden="true"></span>
+                    <span>Add Plugin</span>
+                </div>
+                <div id="add-plugin-list" class="empty" ng-switch-when="true">
+                    <div class="plugin-proto" ng-repeat="proto in pluginPrototypes" ng-click="addPluginPrototype(proto);">
+                        <span>{{proto.name}}</span>
+                        <span style="font-size: 0.8em">{{proto.version}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
