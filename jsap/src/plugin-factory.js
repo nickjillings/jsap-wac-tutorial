@@ -10,9 +10,7 @@ var PluginFactory = function (context, dir) {
         plugin_prototypes = [],
         pluginsList = [],
         currentPluginId = 0,
-        audioStarted = false,
-        script,
-        self = this;
+        audioStarted = false;
 
     /*
         this.loadResource. Load a resource into the global namespace
@@ -22,62 +20,64 @@ var PluginFactory = function (context, dir) {
             .test: function to call, returns true if resource already loaded, false if not
     */
     this.loadResource = function (resourceObject) {
-        if (resourceObject) {
+        (function (resourceObject) {
+            if (typeof resourceObject !== "object") {
+                throw ("Error");
+            }
             if (typeof resourceObject.url !== "string") {
                 throw ("resourceObject.url must be a string");
             }
             if (typeof resourceObject.test !== "function") {
                 throw ("resourceObject.test must be a function");
             }
-            var response = resourceObject.test();
-            if (response !== false && response !== true) {
-                throw ("resourceObject.test must return true or false");
-            }
-            switch (resourceObject.type) {
-                case "CSS":
-                case "css":
-                    return new Promise(function (resolve, reject) {
-                        var css = document.createElement("link");
-                        css.setAttribute("rel", "stylesheet");
-                        css.setAttribute("type", "text/css");
-                        css.setAttribute("href", resourceObject.url);
-                        document.getElementsByTagName("head")[0].appendChild(css);
-                        resolve(resourceObject);
+        })(resourceObject);
+        var response = resourceObject.test();
+        if (response !== false && response !== true) {
+            throw ("resourceObject.test must return true or false");
+        }
+        if (!resourceObject.type) {
+            resourceObject.type = "javascript";
+        }
+        resourceObject.type = resourceObject.type.toLowerCase();
+        switch (resourceObject.type) {
+            case "css":
+                return new Promise(function (resolve, reject) {
+                    var css = document.createElement("link");
+                    css.setAttribute("rel", "stylesheet");
+                    css.setAttribute("type", "text/css");
+                    css.setAttribute("href", resourceObject.url);
+                    document.getElementsByTagName("head")[0].appendChild(css);
+                    resolve(resourceObject);
+                });
+            case "javascript":
+                if (!response) {
+                    return loadResource(resourceObject).then(function (resourceObject) {
+                        if (typeof resourceObject.returnObject === "string") {
+                            var returnObject;
+                            if (window.hasOwnProperty(resourceObject.returnObject)) {
+                                return window[resourceObject.returnObject];
+                            }
+                            return false;
+                        } else {
+                            return true;
+                        }
                     });
-                case "javascript":
-                case "JavaScript":
-                case "Javascript":
-                case undefined:
-                    if (!response) {
-                        return loadResource(resourceObject).then(function (resourceObject) {
-                            if (typeof resourceObject.returnObject === "string") {
-                                var returnObject;
-                                if (window.hasOwnProperty(resourceObject.returnObject)) {
-                                    return window[resourceObject.returnObject];
-                                }
-                                return false;
+                } else {
+                    return new Promise(function (resolve, reject) {
+                        if (typeof resourceObject.returnObject === "string") {
+                            if (window.hasOwnProperty(resourceObject.returnObject)) {
+                                resolve(window[resourceObject.returnObject]);
                             } else {
-                                return true;
+                                reject(false);
                             }
-                        });
-                    } else {
-                        return new Promise(function (resolve, reject) {
-                            if (typeof resourceObject.returnObject === "string") {
-                                if (window.hasOwnProperty(resourceObject.returnObject)) {
-                                    resolve(window[resourceObject.returnObject]);
-                                } else {
-                                    reject(false);
-                                }
-                            } else {
-                                resolve(true);
-                            }
-                        });
-                    }
-                    break;
-                default:
-                    console.error(resourceObject.type);
-                    break;
-            }
+                        } else {
+                            resolve(true);
+                        }
+                    });
+                }
+                break;
+            default:
+                throw ("Invalid type " + String(resourceObject.type));
         }
     };
 
@@ -87,8 +87,8 @@ var PluginFactory = function (context, dir) {
                 throw ("resourceObject.returnObject must be the name of the prototype function");
             }
             return this.loadResource(resourceObject).then(function (plugin) {
-                return self.addPrototype(plugin);
-            });
+                return this.addPrototype(plugin);
+            }.bind(this));
         }
     };
 
@@ -109,23 +109,60 @@ var PluginFactory = function (context, dir) {
 
     var PluginInstance = function (id, plugin_node) {
         this.next_node = undefined;
+        var _bypassed = false;
+        var _in = audio_context.createGain(),
+            _out = audio_context.createGain();
+
+        _in.connect(plugin_node.getInputs()[0]);
+        plugin_node.getOutputs()[0].connect(_out);
+
+        function bypassEnable() {
+            _in.disconnect();
+            _in.connect(_out);
+            _bypassed = true;
+        }
+
+        function bypassDisable() {
+            _in.disconnect();
+            _in.connect(plugin_node.getInputs()[0]);
+            _bypassed = false;
+        }
+
+        this.bypass = function (state) {
+            state = (state === true);
+            if (state) {
+                bypassEnable();
+            } else {
+                bypassDisable();
+            }
+            return _bypassed;
+        }
+
+        this.isBypassed = function () {
+            return _bypass;
+        }
 
         this.reconnect = function (new_next) {
-            if (new_next !== this.next_node) {
-                if (this.next_node !== undefined && typeof this.next_node.getInputs === "function") {
-                    plugin_node.disconnect(this.next_node.getInputs()[0]);
-                }
+            this.connect(new_next);
+        };
+
+        this.connect = function (new_next) {
+            if (this.next_node !== undefined) {
+                this.disconnect();
+            }
+            if (new_next !== undefined && typeof new_next.getInputs === "function") {
                 this.next_node = new_next;
-                if (this.next_node !== undefined && typeof this.next_node.getInputs === "function") {
-                    plugin_node.connect(this.next_node.getInputs()[0]);
-                }
+                _out.connect(this.next_node.getInputs()[0]);
                 return true;
             }
             return false;
         };
 
         this.disconnect = function () {
-            this.reconnect(undefined);
+            if (this.next_node !== undefined) {
+                _out.disconnect(this.next_node.getInputs()[0]);
+                this.next_node = undefined;
+            }
         };
 
         this.destory = function () {
@@ -139,14 +176,19 @@ var PluginFactory = function (context, dir) {
             'node': {
                 'value': plugin_node
             },
-            'getInputs': {
-                'value': function () {
-                    return plugin_node.getInputs();
+            'input': {
+                'get': function () {
+                    return _in;
                 }
             },
-            'getOutputs': {
-                'value': function () {
-                    return plugin_node.getOutputs();
+            'output': {
+                'get': function () {
+                    return _out;
+                }
+            },
+            'bypassed': {
+                'get': function () {
+                    return _bypassed;
                 }
             }
         });
@@ -243,15 +285,12 @@ var PluginFactory = function (context, dir) {
         if (proto.prototype.resources) {
             for (var i = 0; i < proto.prototype.resources.length; i++) {
                 var resource = proto.prototype.resources[i];
+                resource.type = resource.type.toLowerCase();
                 switch (resource.type) {
                     case "css":
-                    case "CSS":
                         loadStylesheet(resource.url);
                         break;
                     case "javascript":
-                    case "Javascript":
-                    case "JavaScript":
-                    case "JS":
                         var object = {
                             'promise': loadResourceChain(resource),
                             'state': 0,
@@ -264,8 +303,7 @@ var PluginFactory = function (context, dir) {
                         resourcePromises.push(object);
                         break;
                     default:
-                        console.error(resource.type);
-                        break;
+                        throw ("Could not load " + resource.url + ", invalid resource.type");
                 }
             }
         }
@@ -286,24 +324,26 @@ var PluginFactory = function (context, dir) {
     };
 
     this.addPrototype = function (plugin_proto) {
+        (function (plugin_proto) {
+            if (typeof plugin_proto !== "function") {
+                throw ("The Prototype must be a function!");
+            }
+            if (typeof plugin_proto.prototype.name !== "string" || plugin_proto.prototype.name.length === 0) {
+                throw ("Malformed plugin. Name not defined");
+            }
+            if (typeof plugin_proto.prototype.version !== "string" || plugin_proto.prototype.version.length === 0) {
+                throw ("Malformed plugin. Version not defined");
+            }
+            if (typeof plugin_proto.prototype.uniqueID !== "string" || plugin_proto.prototype.uniqueID.length === 0) {
+                throw ("Malformed plugin. uniqueID not defined");
+            }
+        })(plugin_proto);
         var testObj = {
             'proto': plugin_proto,
             'name': plugin_proto.prototype.name,
             'version': plugin_proto.prototype.version,
             'uniqueID': plugin_proto.prototype.uniqueID
         };
-        if (typeof plugin_proto !== "function") {
-            throw ("The Prototype must be a function!");
-        }
-        if (typeof testObj.name !== "string" || testObj.name.length === 0) {
-            throw ("Malformed plugin. Name not defined");
-        }
-        if (typeof testObj.version !== "string" || testObj.version.length === 0) {
-            throw ("Malformed plugin. Version not defined");
-        }
-        if (typeof testObj.uniqueID !== "string" || testObj.uniqueID.length === 0) {
-            throw ("Malformed plugin. uniqueID not defined");
-        }
         var obj = plugin_prototypes.find(function (e) {
             var param;
             var match = 0;
@@ -400,19 +440,27 @@ var PluginFactory = function (context, dir) {
         }
     };
 
+    function triggerAudioStart() {
+        pluginsList.forEach(function (n) {
+            n.node.start.call(n.node);
+        });
+    }
+
+    function triggerAudioStop() {
+        pluginsList.forEach(function (n) {
+            n.node.stop.call(n.node);
+        });
+    }
+
     this.audioStart = function () {
         if (!audioStarted) {
-            pluginsList.forEach(function (n) {
-                n.node.start.call(n.node);
-            });
+            triggerAudioStart();
             audioStarted = true;
         }
     };
     this.audioStop = function () {
         if (audioStarted) {
-            pluginsList.forEach(function (n) {
-                n.node.stop.call(n.node);
-            });
+            triggerAudioStop();
             audioStarted = false;
         }
     };
@@ -426,6 +474,25 @@ var PluginFactory = function (context, dir) {
 
     this.FeatureMap = function () {
         var Mappings = [];
+
+        var FeatureNode = function (node) {
+            this.name = node.name;
+            this.parameters = this.parameters;
+            this.features = [];
+        };
+
+        function getFeatureNode(list, check) {
+            return list.find(function (e) {
+                return e.name === this.name;
+            }, check);
+        }
+
+        function addFeatureNode(featureNode, list) {
+            var node = new FeatureNode(featureNode);
+            list.push(node);
+            return node;
+        }
+
         var SourceMap = function (Sender, pluginInstace) {
             var Mappings = [];
             this.getSourceInstance = function () {
@@ -435,20 +502,19 @@ var PluginFactory = function (context, dir) {
                 return Sender;
             };
 
+            function findFeatureObject(featureObject) {
+                return Mappings.find(function (e) {
+                    return (e.outputIndex === this.outputIndex && e.frameSize === this.frameSize);
+                }, featureObject);
+            }
+
             function updateSender() {
                 function recursiveFind(featureList) {
                     var f, list = [];
                     for (f = 0; f < featureList.length; f++) {
-                        var featureNode = list.find(function (e) {
-                            return e.name === this.name;
-                        }, featureList[f]);
-                        if (!featureNode || (featureList[f].parameters && featureList[f].parameters.length !== 0)) {
-                            featureNode = {
-                                'name': featureList[f].name,
-                                'parameters': featureList[f].parameters,
-                                'features': []
-                            };
-                            list.push(featureNode);
+                        var featureNode = getFeatureNode(list, featureList[f]);
+                        if (!featureNode || (featureList.parameters && featureList[f].parameters.length !== 0)) {
+                            featureNode = addFeatureNode(featureList[f], list);
                         }
                         if (featureList[f].features && featureList[f].features.length > 0) {
                             featureNode.features = recursiveFind(featureList[f].features);
@@ -477,9 +543,7 @@ var PluginFactory = function (context, dir) {
             }
 
             this.requestFeatures = function (requestorInstance, featureObject) {
-                var map = Mappings.find(function (e) {
-                    return (e.outputIndex === this.outputIndex && e.frameSize === this.frameSize);
-                }, featureObject);
+                var map = findFeatureObject(featureObject);
                 if (!map) {
                     map = {
                         'outputIndex': featureObject.outputIndex,
@@ -524,9 +588,7 @@ var PluginFactory = function (context, dir) {
                         }
                     });
                 } else {
-                    var map = Mappings.find(function (e) {
-                        return (e.outputIndex === this.outputIndex && e.frameSize === this.frameSize);
-                    }, featureObject);
+                    var map = findFeatureObject(featureObject);
                     if (!map) {
                         return;
                     }
@@ -552,16 +614,9 @@ var PluginFactory = function (context, dir) {
                 var i;
                 for (i = 0; i < featureObject.length; i++) {
                     // Check we have not already listed the feature
-                    var featureNode = rootArray.find(function (e) {
-                        return e.name === this.name;
-                    }, featureObject[i]);
-                    if (!featureNode) {
-                        featureNode = {
-                            'name': featureObject[i].name,
-                            'parameters': featureObject[i].parameters,
-                            'features': []
-                        };
-                        rootArray.push(featureNode);
+                    var featureNode = getFeatureNode(rootArray, featureObject[i]);
+                    if (!featureNode || (featureObject[i].parameters && featureObject[i].parameters.length !== 0)) {
+                        featureNode = addFeatureNode(featureObject[i], rootArray);
                     }
                     if (featureObject[i].features !== undefined && featureObject[i].features.length > 0) {
                         recursivelyAddFeatures(featureNode.features, featureObject[i].features);
@@ -574,9 +629,7 @@ var PluginFactory = function (context, dir) {
                     i;
                 for (i = 0; i < l; i++) {
                     // Find the feature
-                    var index = rootArray.find(function (e) {
-                        return e.name === this.name;
-                    }, featureObject[i]);
+                    var index = getFeatureNode(rootArray, featureObject[i]);
                     if (index >= 0) {
                         if (featureObject[index].features && featureObject[index].features.length > 0) {
                             recursivelyDeleteFeatures(rootArray[index].features, featureObject[index].features);
@@ -648,6 +701,17 @@ var PluginFactory = function (context, dir) {
             }, Sender);
         }
 
+        function findSourceMap(Mappings, source, pluginSender) {
+            var sourceMap = Mappings[findSourceIndex(source)];
+            if (!sourceMap) {
+                sourceMap = Mappings[findSourceIndex(pluginSender)];
+                if (!sourceMap) {
+                    throw ("Could not locate source map");
+                }
+            }
+            return sourceMap;
+        }
+
         // GENERAL INTERFACE
         this.createSourceMap = function (Sender, pluginInstance) {
             var node = new SourceMap(Sender, pluginInstance);
@@ -674,14 +738,8 @@ var PluginFactory = function (context, dir) {
                 requestor = requestor.pluginInstance;
             }
             // Get the source map
-
-            var sourceMap = Mappings[findSourceIndex(source)];
-            if (!sourceMap) {
-                sourceMap = Mappings[findSourceIndex(this.getPluginSender(source))];
-                if (!sourceMap) {
-                    throw ("Could not locate source map");
-                }
-            }
+            var pluginSender = this.getPluginSender(source);
+            var sourceMap = findSourceMap(Mappings, source, pluginSender);
             sourceMap.requestFeatures(requestor, featureObject);
         };
         this.deleteFeatures = function (requestor, source, featureObject) {
@@ -694,13 +752,8 @@ var PluginFactory = function (context, dir) {
                 });
             } else {
                 // Get the source map
-                var sourceMap = Mappings[findSourceIndex(source)];
-                if (!sourceMap) {
-                    sourceMap = Mappings[findSourceIndex(this.getPluginSender(source))];
-                    if (!sourceMap) {
-                        throw ("Could not locate source map");
-                    }
-                }
+                var pluginSender = this.getPluginSender(source);
+                var sourceMap = findSourceMap(Mappings, source, pluginSender);
                 sourceMap.cancelFeatures(requestor, featureObject);
             }
         };
@@ -993,8 +1046,8 @@ var PluginFactory = function (context, dir) {
 
         function cutChain() {
             if (plugin_list.length > 0) {
-                pluginChainStart.disconnect(plugin_list[0].node.getInputs()[0]);
-                plugin_list[plugin_list.length - 1].node.getOutputs()[0].disconnect(pluginChainStop);
+                pluginChainStart.disconnect(plugin_list[0].input);
+                plugin_list[plugin_list.length - 1].output.disconnect(pluginChainStop);
             } else {
                 pluginChainStart.disconnect(pluginChainStop);
             }
@@ -1002,12 +1055,20 @@ var PluginFactory = function (context, dir) {
 
         function joinChain() {
             if (plugin_list.length > 0) {
-                pluginChainStart.connect(plugin_list[0].node.getInputs()[0]);
-                plugin_list[plugin_list.length - 1].node.getOutputs()[0].connect(pluginChainStop);
+                pluginChainStart.connect(plugin_list[0].input);
+                plugin_list[plugin_list.length - 1].output.connect(pluginChainStop);
             } else {
                 pluginChainStart.connect(pluginChainStop);
             }
             chainStartFeature.rejoinExtractors();
+        }
+
+        this.bypassPlugin = function (plugin_instance, state) {
+            // Check is a member of this chain
+            if (plugin_list.includes(plugin_instance) === false) {
+                return;
+            }
+            plugin_instance.bypass(state);
         }
 
         this.getPrototypes = function () {

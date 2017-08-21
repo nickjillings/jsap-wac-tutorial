@@ -15,7 +15,7 @@ var SpectrumData = function (N, sampleRate, parent) {
     var _length = N;
     var _Fs = sampleRate;
     var _f0;
-    var _mfcc, _bark, _dct = this.createDctCoefficients(_length);
+    var _mfcc, _bark, _dct;
 
     function computeFrequencies() {
         for (var i = 0; i < N; i++) {
@@ -125,7 +125,7 @@ var SpectrumData = function (N, sampleRate, parent) {
         "spectral_variance": {
             'value': function () {
                 if (this.result.spectral_variance === undefined) {
-                    this.result.spectral_variance = xtract_spectral_variance(this.data, this.spectral_mean());
+                    this.result.spectral_variance = xtract_spectral_variance(this.data, this.spectral_centroid());
                 }
                 return this.result.spectral_variance;
             }
@@ -149,7 +149,7 @@ var SpectrumData = function (N, sampleRate, parent) {
         "spectral_skewness": {
             'value': function () {
                 if (this.result.spectral_skewness === undefined) {
-                    this.result.spectral_skewness = xtract_spectral_skewness(this.data, this.spectral_mean(), this.spectral_standard_deviation());
+                    this.result.spectral_skewness = xtract_spectral_skewness(this.data, this.spectral_centroid(), this.spectral_standard_deviation());
                 }
                 return this.result.spectral_skewness;
             }
@@ -157,7 +157,7 @@ var SpectrumData = function (N, sampleRate, parent) {
         "spectral_kurtosis": {
             'value': function () {
                 if (this.result.spectral_kurtosis === undefined) {
-                    this.result.spectral_kurtosis = xtract_spectral_kurtosis(this.data, this.spectral_mean(), this.spectral_standard_deviation());
+                    this.result.spectral_kurtosis = xtract_spectral_kurtosis(this.data, this.spectral_centroid(), this.spectral_standard_deviation());
                 }
                 return this.result.spectral_kurtosis;
             }
@@ -325,6 +325,9 @@ var SpectrumData = function (N, sampleRate, parent) {
         },
         "dct": {
             'value': function () {
+                if (_dct === undefined) {
+                    _dct = this.createDctCoefficients(_length);
+                }
                 if (this.result.dct === undefined) {
                     this.result.dct = xtract_dct_2(_amps, _dct);
                 }

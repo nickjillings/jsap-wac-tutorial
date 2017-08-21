@@ -1,6 +1,11 @@
 # JSAP - JavaScript Audio Plugin
 
-[![Code Climate](https://codeclimate.com/github/nickjillings/JSAP/badges/gpa.svg)](https://codeclimate.com/github/nickjillings/JSAP) [![Build Status](https://travis-ci.org/nickjillings/JSAP.svg?branch=master)](https://travis-ci.org/nickjillings/JSAP)
+[![Code Climate](https://codeclimate.com/github/nickjillings/JSAP/badges/gpa.svg)](https://codeclimate.com/github/nickjillings/JSAP)
+
+Branch | Status 
+ --- | --- 
+Master | [![Build Status](https://travis-ci.org/nickjillings/JSAP.svg?branch=master)](https://travis-ci.org/nickjillings/JSAP)
+Develop | [![Build Status](https://travis-ci.org/nickjillings/JSAP.svg?branch=develop)](https://travis-ci.org/nickjillings/JSAP)
 
 ## Introduction
 
@@ -15,6 +20,10 @@ To include the JSAP library into a host, simply include the 'jsap.js' file in yo
 ```html
 <script src="jsap.js"></script>
 ```
+
+## Plugin Repository
+A set of publically maintained plugins is available in the [jsap-plugins](https://github.com/nickjillings/jsap-plugins) repository.
+
 
 ## Documentation
 

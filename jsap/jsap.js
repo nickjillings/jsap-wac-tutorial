@@ -138,9 +138,11 @@ var LinkedStore = function (storeName) {
 // Add getInputs to all AudioNodes to ease deployment
 /*globals AudioNode, Worker, console, window, document, Promise, XMLHttpRequest */
 /*eslint-env browser */
-AudioNode.prototype.getInputs = function () {
-    return [this];
-};
+if (typeof AudioNode === "function" && window.importScripts === undefined) {
+    AudioNode.prototype.getInputs = function () {
+        return [this];
+    };
+}
 
 // This should simply define the BasePlugin from which custom plugins can be built from
 var BasePlugin = function (factory, owner) {
@@ -152,33 +154,30 @@ var BasePlugin = function (factory, owner) {
     this.featureMap = new PluginFeatureInterface(this);
     this.parameters = new ParameterManager(this);
 
-    this.addInput = function (node) {
-        inputList.push(node);
-        return inputList;
-    };
-    this.deleteInput = function (node) {
-        var i = inputList.findIndex(function (e) {
+    function deleteIO(node, list) {
+        var i = list.findIndex(function (e) {
             return e === this;
         }, node);
         if (i === -1) {
             return false;
         }
-        inputList.splice(i, 1);
+        list.splice(i, 1);
         return true;
+    }
+
+    this.addInput = function (node) {
+        inputList.push(node);
+        return inputList;
+    };
+    this.deleteInput = function (node) {
+        return deleteIO(node, inputList);
     };
     this.addOutput = function (node) {
         outputList.push(node);
         return this.outputs;
     };
     this.deleteOutput = function (node) {
-        var i = outputList.findIndex(function (e) {
-            return e === this;
-        }, node);
-        if (i === -1) {
-            return false;
-        }
-        outputList.splice(i, 1);
-        return true;
+        return deleteIO(node, outputList);
     };
 
     this.start = this.stop = this.onloaded = this.onunloaded = this.deconstruct = function () {};
@@ -377,7 +376,9 @@ var ParameterManager = function (owner) {
                     if (typeof ap !== "object" || ap.value === undefined) {
                         throw ("Must be an AudioParam object from an AudioNode");
                     }
+                    var v = this.update(this.value);
                     audioParam = ap;
+                    audioParam.value = v;
                 }
             },
             "boundAudioParam": {
@@ -620,282 +621,7 @@ var ParameterManager = function (owner) {
     }
     SwitchParameter.prototype = Object.create(PluginParameter.prototype);
     SwitchParameter.prototype.constructor = SwitchParameter;
-    /*
-    function PluginParameter(owner, dataType, name, defaultValue, minimum, maximum) {
 
-        var _parentProcessor = owner,
-            _dataType, _minimum, _maximum, _value, _name, _actions, _update, _translate, _trigger, boundParam, _default;
-
-        if (arguments.length < 3) {
-            throw ("INVALID PARAMETERS: Must always define owner, dataType and name");
-        }
-        dataType = dataType.toLowerCase();
-        switch (dataType) {
-            case "number":
-                _dataType = "Number";
-                _minimum = minimum;
-                _maximum = maximum;
-                break;
-            case "string":
-                _dataType = "String";
-                _minimum = minimum;
-                _maximum = maximum;
-                break;
-            case "button":
-                _dataType = "Button";
-                break;
-            case "switch":
-                _dataType = "Switch";
-                break;
-            default:
-                throw ("Invalid dataType");
-        }
-
-        _default = _value = defaultValue;
-        _name = name;
-        _actions = [];
-
-        // Update Function
-        _update = function (value) {
-            return value;
-        };
-
-        // Translate Function
-        _translate = function (value) {
-            return value;
-        };
-
-        // Trigger Function
-        _trigger = function () {};
-
-        this.bindToAudioParam = function (AudioParameterNode) {
-            if ((_dataType === "Number" || _dataType === "Switch") && typeof AudioParameterNode.value === "number") {
-                boundParam = AudioParameterNode;
-                if (AudioParameterNode !== undefined) {
-                    this.value = _translate(boundParam.value);
-                }
-                return;
-            } else if (_dataType === "String" && typeof AudioParameterNode.value === "string") {
-                boundParam = AudioParameterNode;
-                if (AudioParameterNode !== undefined) {
-                    this.value = _translate(boundParam.value);
-                }
-                return;
-            }
-            throw ("Cannot bind parameter of type " + _dataType + " to an AudioParameter of type " + typeof AudioParameterNode.value + " . Use the trigger instead.");
-        };
-
-        function addAction(event) {
-            // Add an action to the list
-            switch (_dataType) {
-                case "Number":
-                case "String":
-                    if (typeof event === _dataType.toLowerCase()) {
-                        _actions.push({
-                            'time': new Date(),
-                            'value': event
-                        });
-                    }
-                    break;
-                case "Switch":
-                    if (event === 1 || event === true) {
-                        event = 1;
-                    } else {
-                        event = 0;
-                    }
-                    _actions.push({
-                        'time': new Date(),
-                        'state': event
-                    });
-                    break;
-                case "Button":
-                    _actions.push({
-                        'time': new Date(),
-                        'event': event.type
-                    });
-                    break;
-            }
-        }
-
-        // Public facing getter/setter to preserve the plugin parameter mappings
-        Object.defineProperties(this, {
-            "dataType": {
-                get: function () {
-                    return _dataType;
-                },
-                set: function () {
-                    throw ("Cannot set the dataType of PluginParameter");
-                }
-            },
-            "name": {
-                get: function () {
-                    return _name;
-                },
-                set: function () {
-                    throw ("Cannot set the name of PluginParameter");
-                }
-            },
-            "actions": {
-                get: function () {
-                    return _actions;
-                },
-                set: function () {
-                    throw ("Cannot set private variable 'actions'");
-                }
-            },
-            "update": {
-                get: function () {
-                    return _update;
-                },
-                set: function (func) {
-                    if (typeof func !== "function") {
-                        throw ("Must pass in a valid function");
-                    }
-                    if (func(0) === undefined) {
-                        throw ("Function must return a value");
-                    }
-                    _update = func;
-                }
-            },
-            "translate": {
-                get: function () {
-                    return _translate;
-                },
-                set: function (func) {
-                    if (typeof func !== "function") {
-                        throw ("Must pass in a valid function");
-                    }
-                    if (func(0) === undefined) {
-                        throw ("Function must return a value");
-                    }
-                    _translate = func;
-                }
-            },
-            "trigger": {
-                get: function () {
-                    return _trigger;
-                },
-                set: function (func, arg_this) {
-                    if (typeof func !== "function") {
-                        throw ("Must pass in a valid function");
-                    }
-                    if (typeof arg_this === "object") {
-                        _trigger = func.bind(arg_this);
-                    } else {
-                        _trigger = func.bind(owner);
-                    }
-                }
-            },
-            "destroy": {
-                'value': function () {
-                    _parentProcessor = _dataType = _minimum = _maximum = _value = _name = _actions = _update = _translate = _trigger = boundParam = undefined;
-                }
-            },
-            "minimum": {
-                get: function () {
-                    if (_dataType === "Number") {
-                        return _minimum;
-                    }
-                    return undefined;
-                },
-                set: function () {
-                    throw ("Cannot set the minimum value of PluginParameter");
-                }
-            },
-            "maximum": {
-                get: function () {
-                    if (_dataType === "Number") {
-                        return maximum;
-                    }
-                    return undefined;
-                },
-                set: function () {
-                    throw ("Cannot set the maximum value of PluginParameter");
-                }
-            },
-            "default": {
-                get: function () {
-                    if (_dataType === "String" || _dataType === "Number") {
-                        return _default;
-                    }
-                    return undefined;
-                },
-                set: function () {
-                    throw ("Cannot set the default value of PluginParameter");
-                }
-            },
-            "value": {
-                get: function () {
-                    if (_dataType === "String") {
-                        if (boundParam) {
-                            _value = _translate(boundParam.value);
-                        }
-                        return _value;
-                    } else if (_dataType === "Number" || _dataType === "Switch") {
-                        return _value;
-                    }
-                    return undefined;
-                },
-                set: function (newValue) {
-                    if (_dataType !== "Switch" && _dataType !== "String" && _dataType !== "Number") {
-                        throw ("Cannot read non-value PluginParameter");
-                    }
-                    if (_dataType === "Switch") {
-                        _value++;
-                        if (_value >= _maximum) {
-                            _value = minimum;
-                        }
-                    } else {
-                        switch (_dataType) {
-                            case "String":
-                                if (typeof newValue !== "string") {
-                                    newValue = String(newValue);
-                                }
-                                break;
-                            case "Number":
-                                if (typeof newValue !== "number") {
-                                    newValue = Number(newValue);
-                                }
-                                if (_maximum !== undefined) {
-                                    newValue = Math.min(newValue, _maximum);
-                                }
-                                if (_minimum !== undefined) {
-                                    newValue = Math.max(newValue, _minimum);
-                                }
-                                break;
-                        }
-                        _value = newValue;
-                        if (boundParam) {
-                            boundParam.value = _update(_value);
-                        }
-                    }
-                    addAction(_value);
-                    _trigger();
-                    return _value;
-                }
-            },
-            "onclick": {
-                "value": function (event) {
-                    if (_dataType === "Switch") {
-                        _value++;
-                        if (_value >= maximum) {
-                            _value = minimum;
-                        }
-                        addAction(event);
-                        _trigger();
-                        return _value;
-                    } else if (_dataType === "Button") {
-                        _value = event;
-                        addAction(event);
-                        _trigger();
-                        return event;
-                    }
-                    throw ("Cannot use onclick on PluginParameter");
-                }
-            }
-        });
-    }
-*/
     Object.defineProperties(this, {
         'createNumberParameter': {
             "value": function (name, defaultValue, minimum, maximum) {
@@ -1011,7 +737,7 @@ var ParameterManager = function (owner) {
                 var key;
                 for (key in object) {
                     if (object.hasOwnProperty(key)) {
-                        this.setParameterByName(key, object[key]);
+                        this.setParameterByName(key, object[key].value);
                     }
                 }
             }
@@ -1043,6 +769,18 @@ var PluginFeatureInterface = function (BasePluginInstance) {
     });
 };
 var PluginFeatureInterfaceReceiver = function (FeatureInterfaceInstance, FactoryFeatureMap) {
+    function checkFeatureArgs(source, featureObject) {
+        if (source === undefined) {
+            throw ("Source plugin must be defined");
+        }
+        if (featureObject === undefined) {
+            throw ("FeatureObject must be defined");
+        }
+        if (typeof featureObject.outputIndex !== "number" || typeof featureObject.frameSize !== "number" || typeof featureObject.features !== "object") {
+            throw ("Malformed featureObject");
+        }
+        return true;
+    }
     var c_features = function () {};
     this.requestFeatures = function (featureList) {
         var i;
@@ -1055,27 +793,11 @@ var PluginFeatureInterfaceReceiver = function (FeatureInterfaceInstance, Factory
         }
     };
     this.requestFeaturesFromPlugin = function (source, featureObject) {
-        if (source === undefined) {
-            throw ("Source plugin must be defined");
-        }
-        if (featureObject === undefined) {
-            throw ("FeatureObject must be defined");
-        }
-        if (typeof featureObject.outputIndex !== "number" || typeof featureObject.frameSize !== "number" || typeof featureObject.features !== "object") {
-            throw ("Malformed featureObject");
-        }
+        checkFeatureArgs(source, featureObject);
         FactoryFeatureMap.requestFeatures(FeatureInterfaceInstance.plugin, source, featureObject);
     };
     this.cancelFeaturesFromPlugin = function (source, featureObject) {
-        if (source === undefined) {
-            throw ("Source plugin must be defined");
-        }
-        if (featureObject === undefined) {
-            throw ("FeatureObject must be defined");
-        }
-        if (typeof featureObject.outputIndex !== "number" || typeof featureObject.frameSize !== "number" || typeof featureObject.features !== "object") {
-            throw ("Malformed featureObject");
-        }
+        checkFeatureArgs(source, featureObject);
         FactoryFeatureMap.deleteFeatures(FeatureInterfaceInstance.plugin, source, featureObject);
     };
     this.cancelAllFeaturesFromPlugin = function (source) {
@@ -1411,9 +1133,7 @@ var PluginFactory = function (context, dir) {
         plugin_prototypes = [],
         pluginsList = [],
         currentPluginId = 0,
-        audioStarted = false,
-        script,
-        self = this;
+        audioStarted = false;
 
     /*
         this.loadResource. Load a resource into the global namespace
@@ -1423,62 +1143,64 @@ var PluginFactory = function (context, dir) {
             .test: function to call, returns true if resource already loaded, false if not
     */
     this.loadResource = function (resourceObject) {
-        if (resourceObject) {
+        (function (resourceObject) {
+            if (typeof resourceObject !== "object") {
+                throw ("Error");
+            }
             if (typeof resourceObject.url !== "string") {
                 throw ("resourceObject.url must be a string");
             }
             if (typeof resourceObject.test !== "function") {
                 throw ("resourceObject.test must be a function");
             }
-            var response = resourceObject.test();
-            if (response !== false && response !== true) {
-                throw ("resourceObject.test must return true or false");
-            }
-            switch (resourceObject.type) {
-                case "CSS":
-                case "css":
-                    return new Promise(function (resolve, reject) {
-                        var css = document.createElement("link");
-                        css.setAttribute("rel", "stylesheet");
-                        css.setAttribute("type", "text/css");
-                        css.setAttribute("href", resourceObject.url);
-                        document.getElementsByTagName("head")[0].appendChild(css);
-                        resolve(resourceObject);
+        })(resourceObject);
+        var response = resourceObject.test();
+        if (response !== false && response !== true) {
+            throw ("resourceObject.test must return true or false");
+        }
+        if (!resourceObject.type) {
+            resourceObject.type = "javascript";
+        }
+        resourceObject.type = resourceObject.type.toLowerCase();
+        switch (resourceObject.type) {
+            case "css":
+                return new Promise(function (resolve, reject) {
+                    var css = document.createElement("link");
+                    css.setAttribute("rel", "stylesheet");
+                    css.setAttribute("type", "text/css");
+                    css.setAttribute("href", resourceObject.url);
+                    document.getElementsByTagName("head")[0].appendChild(css);
+                    resolve(resourceObject);
+                });
+            case "javascript":
+                if (!response) {
+                    return loadResource(resourceObject).then(function (resourceObject) {
+                        if (typeof resourceObject.returnObject === "string") {
+                            var returnObject;
+                            if (window.hasOwnProperty(resourceObject.returnObject)) {
+                                return window[resourceObject.returnObject];
+                            }
+                            return false;
+                        } else {
+                            return true;
+                        }
                     });
-                case "javascript":
-                case "JavaScript":
-                case "Javascript":
-                case undefined:
-                    if (!response) {
-                        return loadResource(resourceObject).then(function (resourceObject) {
-                            if (typeof resourceObject.returnObject === "string") {
-                                var returnObject;
-                                if (window.hasOwnProperty(resourceObject.returnObject)) {
-                                    return window[resourceObject.returnObject];
-                                }
-                                return false;
+                } else {
+                    return new Promise(function (resolve, reject) {
+                        if (typeof resourceObject.returnObject === "string") {
+                            if (window.hasOwnProperty(resourceObject.returnObject)) {
+                                resolve(window[resourceObject.returnObject]);
                             } else {
-                                return true;
+                                reject(false);
                             }
-                        });
-                    } else {
-                        return new Promise(function (resolve, reject) {
-                            if (typeof resourceObject.returnObject === "string") {
-                                if (window.hasOwnProperty(resourceObject.returnObject)) {
-                                    resolve(window[resourceObject.returnObject]);
-                                } else {
-                                    reject(false);
-                                }
-                            } else {
-                                resolve(true);
-                            }
-                        });
-                    }
-                    break;
-                default:
-                    console.error(resourceObject.type);
-                    break;
-            }
+                        } else {
+                            resolve(true);
+                        }
+                    });
+                }
+                break;
+            default:
+                throw ("Invalid type " + String(resourceObject.type));
         }
     };
 
@@ -1488,8 +1210,8 @@ var PluginFactory = function (context, dir) {
                 throw ("resourceObject.returnObject must be the name of the prototype function");
             }
             return this.loadResource(resourceObject).then(function (plugin) {
-                return self.addPrototype(plugin);
-            });
+                return this.addPrototype(plugin);
+            }.bind(this));
         }
     };
 
@@ -1510,23 +1232,60 @@ var PluginFactory = function (context, dir) {
 
     var PluginInstance = function (id, plugin_node) {
         this.next_node = undefined;
+        var _bypassed = false;
+        var _in = audio_context.createGain(),
+            _out = audio_context.createGain();
+
+        _in.connect(plugin_node.getInputs()[0]);
+        plugin_node.getOutputs()[0].connect(_out);
+
+        function bypassEnable() {
+            _in.disconnect();
+            _in.connect(_out);
+            _bypassed = true;
+        }
+
+        function bypassDisable() {
+            _in.disconnect();
+            _in.connect(plugin_node.getInputs()[0]);
+            _bypassed = false;
+        }
+
+        this.bypass = function (state) {
+            state = (state === true);
+            if (state) {
+                bypassEnable();
+            } else {
+                bypassDisable();
+            }
+            return _bypassed;
+        }
+
+        this.isBypassed = function () {
+            return _bypass;
+        }
 
         this.reconnect = function (new_next) {
-            if (new_next !== this.next_node) {
-                if (this.next_node !== undefined && typeof this.next_node.getInputs === "function") {
-                    plugin_node.disconnect(this.next_node.getInputs()[0]);
-                }
+            this.connect(new_next);
+        };
+
+        this.connect = function (new_next) {
+            if (this.next_node !== undefined) {
+                this.disconnect();
+            }
+            if (new_next !== undefined && typeof new_next.getInputs === "function") {
                 this.next_node = new_next;
-                if (this.next_node !== undefined && typeof this.next_node.getInputs === "function") {
-                    plugin_node.connect(this.next_node.getInputs()[0]);
-                }
+                _out.connect(this.next_node.getInputs()[0]);
                 return true;
             }
             return false;
         };
 
         this.disconnect = function () {
-            this.reconnect(undefined);
+            if (this.next_node !== undefined) {
+                _out.disconnect(this.next_node.getInputs()[0]);
+                this.next_node = undefined;
+            }
         };
 
         this.destory = function () {
@@ -1540,14 +1299,19 @@ var PluginFactory = function (context, dir) {
             'node': {
                 'value': plugin_node
             },
-            'getInputs': {
-                'value': function () {
-                    return plugin_node.getInputs();
+            'input': {
+                'get': function () {
+                    return _in;
                 }
             },
-            'getOutputs': {
-                'value': function () {
-                    return plugin_node.getOutputs();
+            'output': {
+                'get': function () {
+                    return _out;
+                }
+            },
+            'bypassed': {
+                'get': function () {
+                    return _bypassed;
                 }
             }
         });
@@ -1644,15 +1408,12 @@ var PluginFactory = function (context, dir) {
         if (proto.prototype.resources) {
             for (var i = 0; i < proto.prototype.resources.length; i++) {
                 var resource = proto.prototype.resources[i];
+                resource.type = resource.type.toLowerCase();
                 switch (resource.type) {
                     case "css":
-                    case "CSS":
                         loadStylesheet(resource.url);
                         break;
                     case "javascript":
-                    case "Javascript":
-                    case "JavaScript":
-                    case "JS":
                         var object = {
                             'promise': loadResourceChain(resource),
                             'state': 0,
@@ -1665,8 +1426,7 @@ var PluginFactory = function (context, dir) {
                         resourcePromises.push(object);
                         break;
                     default:
-                        console.error(resource.type);
-                        break;
+                        throw ("Could not load " + resource.url + ", invalid resource.type");
                 }
             }
         }
@@ -1687,24 +1447,26 @@ var PluginFactory = function (context, dir) {
     };
 
     this.addPrototype = function (plugin_proto) {
+        (function (plugin_proto) {
+            if (typeof plugin_proto !== "function") {
+                throw ("The Prototype must be a function!");
+            }
+            if (typeof plugin_proto.prototype.name !== "string" || plugin_proto.prototype.name.length === 0) {
+                throw ("Malformed plugin. Name not defined");
+            }
+            if (typeof plugin_proto.prototype.version !== "string" || plugin_proto.prototype.version.length === 0) {
+                throw ("Malformed plugin. Version not defined");
+            }
+            if (typeof plugin_proto.prototype.uniqueID !== "string" || plugin_proto.prototype.uniqueID.length === 0) {
+                throw ("Malformed plugin. uniqueID not defined");
+            }
+        })(plugin_proto);
         var testObj = {
             'proto': plugin_proto,
             'name': plugin_proto.prototype.name,
             'version': plugin_proto.prototype.version,
             'uniqueID': plugin_proto.prototype.uniqueID
         };
-        if (typeof plugin_proto !== "function") {
-            throw ("The Prototype must be a function!");
-        }
-        if (typeof testObj.name !== "string" || testObj.name.length === 0) {
-            throw ("Malformed plugin. Name not defined");
-        }
-        if (typeof testObj.version !== "string" || testObj.version.length === 0) {
-            throw ("Malformed plugin. Version not defined");
-        }
-        if (typeof testObj.uniqueID !== "string" || testObj.uniqueID.length === 0) {
-            throw ("Malformed plugin. uniqueID not defined");
-        }
         var obj = plugin_prototypes.find(function (e) {
             var param;
             var match = 0;
@@ -1801,19 +1563,27 @@ var PluginFactory = function (context, dir) {
         }
     };
 
+    function triggerAudioStart() {
+        pluginsList.forEach(function (n) {
+            n.node.start.call(n.node);
+        });
+    }
+
+    function triggerAudioStop() {
+        pluginsList.forEach(function (n) {
+            n.node.stop.call(n.node);
+        });
+    }
+
     this.audioStart = function () {
         if (!audioStarted) {
-            pluginsList.forEach(function (n) {
-                n.node.start.call(n.node);
-            });
+            triggerAudioStart();
             audioStarted = true;
         }
     };
     this.audioStop = function () {
         if (audioStarted) {
-            pluginsList.forEach(function (n) {
-                n.node.stop.call(n.node);
-            });
+            triggerAudioStop();
             audioStarted = false;
         }
     };
@@ -1827,6 +1597,25 @@ var PluginFactory = function (context, dir) {
 
     this.FeatureMap = function () {
         var Mappings = [];
+
+        var FeatureNode = function (node) {
+            this.name = node.name;
+            this.parameters = this.parameters;
+            this.features = [];
+        };
+
+        function getFeatureNode(list, check) {
+            return list.find(function (e) {
+                return e.name === this.name;
+            }, check);
+        }
+
+        function addFeatureNode(featureNode, list) {
+            var node = new FeatureNode(featureNode);
+            list.push(node);
+            return node;
+        }
+
         var SourceMap = function (Sender, pluginInstace) {
             var Mappings = [];
             this.getSourceInstance = function () {
@@ -1836,20 +1625,19 @@ var PluginFactory = function (context, dir) {
                 return Sender;
             };
 
+            function findFeatureObject(featureObject) {
+                return Mappings.find(function (e) {
+                    return (e.outputIndex === this.outputIndex && e.frameSize === this.frameSize);
+                }, featureObject);
+            }
+
             function updateSender() {
                 function recursiveFind(featureList) {
                     var f, list = [];
                     for (f = 0; f < featureList.length; f++) {
-                        var featureNode = list.find(function (e) {
-                            return e.name === this.name;
-                        }, featureList[f]);
-                        if (!featureNode || (featureList[f].parameters && featureList[f].parameters.length !== 0)) {
-                            featureNode = {
-                                'name': featureList[f].name,
-                                'parameters': featureList[f].parameters,
-                                'features': []
-                            };
-                            list.push(featureNode);
+                        var featureNode = getFeatureNode(list, featureList[f]);
+                        if (!featureNode || (featureList.parameters && featureList[f].parameters.length !== 0)) {
+                            featureNode = addFeatureNode(featureList[f], list);
                         }
                         if (featureList[f].features && featureList[f].features.length > 0) {
                             featureNode.features = recursiveFind(featureList[f].features);
@@ -1878,9 +1666,7 @@ var PluginFactory = function (context, dir) {
             }
 
             this.requestFeatures = function (requestorInstance, featureObject) {
-                var map = Mappings.find(function (e) {
-                    return (e.outputIndex === this.outputIndex && e.frameSize === this.frameSize);
-                }, featureObject);
+                var map = findFeatureObject(featureObject);
                 if (!map) {
                     map = {
                         'outputIndex': featureObject.outputIndex,
@@ -1925,9 +1711,7 @@ var PluginFactory = function (context, dir) {
                         }
                     });
                 } else {
-                    var map = Mappings.find(function (e) {
-                        return (e.outputIndex === this.outputIndex && e.frameSize === this.frameSize);
-                    }, featureObject);
+                    var map = findFeatureObject(featureObject);
                     if (!map) {
                         return;
                     }
@@ -1953,16 +1737,9 @@ var PluginFactory = function (context, dir) {
                 var i;
                 for (i = 0; i < featureObject.length; i++) {
                     // Check we have not already listed the feature
-                    var featureNode = rootArray.find(function (e) {
-                        return e.name === this.name;
-                    }, featureObject[i]);
-                    if (!featureNode) {
-                        featureNode = {
-                            'name': featureObject[i].name,
-                            'parameters': featureObject[i].parameters,
-                            'features': []
-                        };
-                        rootArray.push(featureNode);
+                    var featureNode = getFeatureNode(rootArray, featureObject[i]);
+                    if (!featureNode || (featureObject[i].parameters && featureObject[i].parameters.length !== 0)) {
+                        featureNode = addFeatureNode(featureObject[i], rootArray);
                     }
                     if (featureObject[i].features !== undefined && featureObject[i].features.length > 0) {
                         recursivelyAddFeatures(featureNode.features, featureObject[i].features);
@@ -1975,9 +1752,7 @@ var PluginFactory = function (context, dir) {
                     i;
                 for (i = 0; i < l; i++) {
                     // Find the feature
-                    var index = rootArray.find(function (e) {
-                        return e.name === this.name;
-                    }, featureObject[i]);
+                    var index = getFeatureNode(rootArray, featureObject[i]);
                     if (index >= 0) {
                         if (featureObject[index].features && featureObject[index].features.length > 0) {
                             recursivelyDeleteFeatures(rootArray[index].features, featureObject[index].features);
@@ -2049,6 +1824,17 @@ var PluginFactory = function (context, dir) {
             }, Sender);
         }
 
+        function findSourceMap(Mappings, source, pluginSender) {
+            var sourceMap = Mappings[findSourceIndex(source)];
+            if (!sourceMap) {
+                sourceMap = Mappings[findSourceIndex(pluginSender)];
+                if (!sourceMap) {
+                    throw ("Could not locate source map");
+                }
+            }
+            return sourceMap;
+        }
+
         // GENERAL INTERFACE
         this.createSourceMap = function (Sender, pluginInstance) {
             var node = new SourceMap(Sender, pluginInstance);
@@ -2075,14 +1861,8 @@ var PluginFactory = function (context, dir) {
                 requestor = requestor.pluginInstance;
             }
             // Get the source map
-
-            var sourceMap = Mappings[findSourceIndex(source)];
-            if (!sourceMap) {
-                sourceMap = Mappings[findSourceIndex(this.getPluginSender(source))];
-                if (!sourceMap) {
-                    throw ("Could not locate source map");
-                }
-            }
+            var pluginSender = this.getPluginSender(source);
+            var sourceMap = findSourceMap(Mappings, source, pluginSender);
             sourceMap.requestFeatures(requestor, featureObject);
         };
         this.deleteFeatures = function (requestor, source, featureObject) {
@@ -2095,13 +1875,8 @@ var PluginFactory = function (context, dir) {
                 });
             } else {
                 // Get the source map
-                var sourceMap = Mappings[findSourceIndex(source)];
-                if (!sourceMap) {
-                    sourceMap = Mappings[findSourceIndex(this.getPluginSender(source))];
-                    if (!sourceMap) {
-                        throw ("Could not locate source map");
-                    }
-                }
+                var pluginSender = this.getPluginSender(source);
+                var sourceMap = findSourceMap(Mappings, source, pluginSender);
                 sourceMap.cancelFeatures(requestor, featureObject);
             }
         };
@@ -2394,8 +2169,8 @@ var PluginFactory = function (context, dir) {
 
         function cutChain() {
             if (plugin_list.length > 0) {
-                pluginChainStart.disconnect(plugin_list[0].node.getInputs()[0]);
-                plugin_list[plugin_list.length - 1].node.getOutputs()[0].disconnect(pluginChainStop);
+                pluginChainStart.disconnect(plugin_list[0].input);
+                plugin_list[plugin_list.length - 1].output.disconnect(pluginChainStop);
             } else {
                 pluginChainStart.disconnect(pluginChainStop);
             }
@@ -2403,12 +2178,20 @@ var PluginFactory = function (context, dir) {
 
         function joinChain() {
             if (plugin_list.length > 0) {
-                pluginChainStart.connect(plugin_list[0].node.getInputs()[0]);
-                plugin_list[plugin_list.length - 1].node.getOutputs()[0].connect(pluginChainStop);
+                pluginChainStart.connect(plugin_list[0].input);
+                plugin_list[plugin_list.length - 1].output.connect(pluginChainStop);
             } else {
                 pluginChainStart.connect(pluginChainStop);
             }
             chainStartFeature.rejoinExtractors();
+        }
+
+        this.bypassPlugin = function (plugin_instance, state) {
+            // Check is a member of this chain
+            if (plugin_list.includes(plugin_instance) === false) {
+                return;
+            }
+            plugin_instance.bypass(state);
         }
 
         this.getPrototypes = function () {
@@ -2829,8 +2612,6 @@ function xtract_array_deinterlace(data, num_arrays) {
     var result, N;
     if (!xtract_assert_positive_integer(num_arrays)) {
         throw ("num_arrays must be a positive integer");
-    } else if (num_arrays === 1) {
-        return data;
     }
     result = [];
     N = data.length / num_arrays;
@@ -2858,17 +2639,22 @@ function xtract_get_number_of_frames(data, hop_size) {
 }
 
 function xtract_get_data_frames(data, frame_size, hop_size, copy) {
-    if (!xtract_assert_array(data)) {
-        throw ("Invalid data parameter. Must be item with iterable list");
-    }
-    if (!xtract_assert_positive_integer(frame_size)) {
-        throw ("xtract_get_data_frames requires the frame_size to be a positive integer");
-    }
     if (hop_size === undefined) {
         hop_size = frame_size;
-    } else if (!xtract_assert_positive_integer(hop_size)) {
-        throw ("xtract_get_data_frames requires the hop_size to be a positive integer");
     }
+    (function (data, frame_size, hop_size) {
+        if (!xtract_assert_array(data)) {
+            throw ("Invalid data parameter. Must be item with iterable list");
+        }
+        if (!xtract_assert_positive_integer(frame_size)) {
+            throw ("xtract_get_data_frames requires the frame_size to be a positive integer");
+        }
+        if (!xtract_assert_positive_integer(hop_size)) {
+            throw ("xtract_get_data_frames requires the hop_size to be a positive integer");
+        }
+        return true;
+    })(data, frame_size, hop_size);
+
     var frames = [];
     var N = data.length;
     var K = Math.ceil(N / hop_size);
@@ -2952,24 +2738,26 @@ function xtract_array_to_JSON(array) {
 }
 
 function xtract_frame_from_array(src, dst, index, frame_size, hop_size) {
-    if (!xtract_assert_positive_integer(index)) {
-        throw ("xtract_get_frame requires the index to be an integer value");
-    }
-    if (!xtract_assert_positive_integer(frame_size)) {
-        throw ("xtract_get_frame requires the frame_size to be a positive integer");
-    }
     if (hop_size === undefined) {
         hop_size = frame_size;
     }
-    if (!xtract_assert_array(src)) {
-        throw ("Invalid data parameter. Must be item with iterable list");
-    }
-    if (!xtract_assert_array(dst)) {
-        throw ("dst must be an Array-like object equal in length to frame_size");
-    }
-    if (!xtract_assert_positive_integer(hop_size)) {
-        throw ("xtract_get_frame requires the hop_size to be a positive integer");
-    }
+    (function (index, frame_size, src, dst, hop_size) {
+        if (!xtract_assert_positive_integer(index)) {
+            throw ("xtract_get_frame requires the index to be an integer value");
+        }
+        if (!xtract_assert_positive_integer(frame_size)) {
+            throw ("xtract_get_frame requires the frame_size to be a positive integer");
+        }
+        if (!xtract_assert_array(src)) {
+            throw ("Invalid data parameter. Must be item with iterable list");
+        }
+        if (!xtract_assert_array(dst)) {
+            throw ("dst must be an Array-like object equal in length to frame_size");
+        }
+        if (!xtract_assert_positive_integer(hop_size)) {
+            throw ("xtract_get_frame requires the hop_size to be a positive integer");
+        }
+    })(index, frame_size, src, dst, hop_size);
     var K = xtract_get_number_of_frames(src, hop_size);
     if (index >= K) {
         throw ("index number " + index + " out of bounds");
@@ -3078,18 +2866,9 @@ function xtract_skewness_kurtosis(array, mean, standard_deviation) {
         return [0.0, 0.0];
     }
     var result = [0.0, 0.0];
-    if (array.reduce) {
-        result = array.reduce(function (a, b) {
-            var interim = (b - mean) / standard_deviation;
-            a[0] += Math.pow(interim, 3);
-            a[1] += Math.pow(interim, 4);
-            return a;
-        }, result);
-    } else {
-        for (var n = 0; n < array.length; n++) {
-            result[0] += Math.pow((array[n] - mean) / standard_deviation, 3);
-            result[1] += Math.pow((array[n] - mean) / standard_deviation, 4);
-        }
+    for (var n = 0; n < array.length; n++) {
+        result[0] += Math.pow((array[n] - mean) / standard_deviation, 3);
+        result[1] += Math.pow((array[n] - mean) / standard_deviation, 4);
     }
     result[0] /= array.length;
     result[1] /= array.length;
@@ -3111,7 +2890,7 @@ function xtract_spectral_centroid(spectrum) {
     var n = N >> 1;
     var amps = spectrum.subarray(0, n);
     var freqs = spectrum.subarray(n);
-    var A_d = xtract_array_sum(amps) / n;
+    var A_d = xtract_array_sum(amps);
     if (A_d === 0.0) {
         return 0.0;
     }
@@ -3119,8 +2898,7 @@ function xtract_spectral_centroid(spectrum) {
     while (n--) {
         sum += freqs[n] * (amps[n] / A_d);
     }
-    var result = sum / (N >> 1);
-    return result;
+    return sum;
 }
 
 function xtract_spectral_mean(spectrum) {
@@ -3134,11 +2912,11 @@ function xtract_spectral_mean(spectrum) {
     return result;
 }
 
-function xtract_spectral_variance(spectrum, spectral_mean) {
+function xtract_spectral_variance(spectrum, spectral_centroid) {
     if (!xtract_assert_array(spectrum))
         return 0;
-    if (typeof spectral_mean !== "number") {
-        spectral_mean = xtract_spectral_centroid(spectrum);
+    if (typeof spectral_centroid !== "number") {
+        spectral_centroid = xtract_spectral_centroid(spectrum);
     }
     var A = 0,
         result = 0;
@@ -3146,10 +2924,9 @@ function xtract_spectral_variance(spectrum, spectral_mean) {
     var n = N >> 1;
     var amps = spectrum.subarray(0, n);
     var freqs = spectrum.subarray(n, N);
-    amps = xtract_array_scale(amps, 1 / xtract_array_sum(amps))
-    A = xtract_array_sum(amps);
+    var A_d = xtract_array_sum(amps);
     while (n--) {
-        result += Math.pow(freqs[n] - spectral_mean, 2) * (amps[n] / A);
+        result += Math.pow(freqs[n] - spectral_centroid, 2) * (amps[n] / A_d);
     }
     return result;
 }
@@ -3167,43 +2944,51 @@ function xtract_spectral_standard_deviation(spectrum, spectral_variance) {
     return Math.sqrt(spectral_variance);
 }
 
-function xtract_spectral_skewness(spectrum, spectral_mean, spectral_standard_deviation) {
+function xtract_spectral_skewness(spectrum, spectral_centroid, spectral_standard_deviation) {
     if (!xtract_assert_array(spectrum))
         return 0;
     if (typeof spectral_mean !== "number") {
-        spectral_mean = xtract_spectral_mean(spectrum);
+        spectral_centroid = xtract_spectral_centroid(spectrum);
     }
     if (typeof spectral_standard_deviation !== "number") {
-        spectral_standard_deviation = xtract_spectral_standard_deviation(spectrum, xtract_spectral_variance(spectrum, spectral_mean));
+        spectral_standard_deviation = xtract_spectral_standard_deviation(spectrum, xtract_spectral_variance(spectrum, spectral_centroid));
+    }
+    if (spectral_standard_deviation === 0) {
+        return 0;
     }
     var result = 0;
     var N = spectrum.length;
     var K = N >> 1;
     var amps = spectrum.subarray(0, K);
     var freqs = spectrum.subarray(K);
+    var A_d = xtract_array_sum(amps);
     for (var n = 0; n < K; n++) {
-        result += Math.pow(freqs[n] - spectral_mean, 3) * amps[n];
+        result += Math.pow(freqs[n] - spectral_centroid, 3) * (amps[n] / A_d);
     }
     result /= Math.pow(spectral_standard_deviation, 3);
     return result;
 }
 
-function xtract_spectral_kurtosis(spectrum, spectral_mean, spectral_standard_deviation) {
+function xtract_spectral_kurtosis(spectrum, spectral_centroid, spectral_standard_deviation) {
     if (!xtract_assert_array(spectrum))
         return 0;
-    if (typeof spectral_mean !== "number") {
-        spectral_mean = xtract_spectral_mean(spectrum);
+    if (typeof spectral_centroid !== "number") {
+        spectral_centroid = xtract_spectral_centroid(spectrum);
     }
     if (typeof spectral_standard_deviation !== "number") {
-        spectral_standard_deviation = xtract_spectral_standard_deviation(spectrum, xtract_spectral_variance(spectrum, spectral_mean));
+        spectral_standard_deviation = xtract_spectral_standard_deviation(spectrum, xtract_spectral_variance(spectrum, spectral_centroid));
+    }
+    if (spectral_standard_deviation === 0) {
+        return Infinity;
     }
     var result = 0;
     var N = spectrum.length;
     var K = N >> 1;
     var amps = spectrum.subarray(0, K);
     var freqs = spectrum.subarray(K);
+    var A_d = xtract_array_sum(amps);
     for (var n = 0; n < K; n++) {
-        result += Math.pow(freqs[n] - spectral_mean, 4) * amps[n];
+        result += Math.pow(freqs[n] - spectral_centroid, 4) * (amps[n] / A_d);
     }
     return result / Math.pow(spectral_standard_deviation, 4);
 }
@@ -3216,7 +3001,7 @@ function xtract_irregularity_k(spectrum) {
     var K = N >> 1;
     var amps = spectrum.subarray(0, K);
     for (var n = 1; n < K - 1; n++) {
-        result += Math.abs(amps[n] - (amps[n - 1] + amps[n] + amps[n + 1]) / 3);
+        result += Math.abs(Math.log10(amps[n]) - Math.log10(amps[n - 1] + amps[n] + amps[n + 1]) / 3);
     }
     return result;
 }
@@ -3245,7 +3030,7 @@ function xtract_tristimulus(spectrum, f0) {
     }
     var h = 0,
         den = 0.0,
-        p1 = p2 = p3 = p4 = p5 = 0.0,
+        p = [0, 0, 0, 0, 0],
         temp = 0.0,
         num = 0.0;
     var N = spectrum.length;
@@ -3258,39 +3043,14 @@ function xtract_tristimulus(spectrum, f0) {
         if (temp !== 0) {
             den += temp;
             h = Math.floor(freqs[i] / f0 + 0.5);
-            if (h === 1) {
-                p1 += temp;
-            }
-            switch (h) {
-                case 2:
-                    p2 += temp;
-                    break;
-                case 3:
-                    p3 += temp;
-                    break;
-                case 4:
-                    p4 += temp;
-                    break;
-                default:
-                    break;
-            }
-            if (h >= 5) {
-                num += temp;
-            }
+            p[h - 1] += temp
         }
     }
 
-    p2 += p3 + p4;
     if (den !== 0.0) {
-        if (p1 !== 0.0) {
-            trist[0] = p1 / den;
-        }
-        if (p2 !== 0.0) {
-            trist[1] = p2 / den;
-        }
-        if (num !== 0.0) {
-            trist[2] = num / den;
-        }
+        trist[0] = p[0] / den;
+        trist[1] = (p[1] + p[2] + p[3]) / den;
+        trist[2] = p[4] / den;
     }
     return trist;
 }
@@ -3316,15 +3076,13 @@ function xtract_smoothness(spectrum) {
         temp = 0;
     var N = spectrum.length;
     var K = N >> 1;
-    prev = spectrum[0] <= 0 ? 1e-5 : spectrum[0];
-    current = spectrum[1] <= 0 ? 1e-5 : spectrum[1];
+    prev = Math.max(1e-5, spectrum[0]);
+    current = Math.max(1e-5, spectrum[1]);
     for (var n = 1; n < K - 1; n++) {
-        if (n > 1) {
-            prev = current;
-            current = next;
-        }
-        next = spectrum[n + 1] <= 0 ? 1e-5 : spectrum[n + 1];
+        next = Math.max(1e-5, spectrum[n + 1]);
         temp += Math.abs(20.0 * Math.log(current) - (20.0 * Math.log(prev) + 20.0 * Math.log(current) + 20.0 * Math.log(next)) / 3.0);
+        prev = current
+        current = next
     }
     return temp;
 }
@@ -3394,15 +3152,10 @@ function xtract_flatness(spectrum) {
     var K = N >> 1;
     var amps = spectrum.subarray(0, K);
     for (var n = 0; n < K; n++) {
-        if (amps[n] !== 0.0) {
-            if (xtract_is_denormal(num)) {
-                denormal_found = true;
-                break;
-            }
-            num *= amps[n];
-            den += amps[n];
-            count++;
-        }
+        temp = Math.max(1e-32, amps[n])
+        num *= temp;
+        den += temp;
+        count++;
     }
     if (count === 0) {
         return 0;
@@ -3500,10 +3253,11 @@ function xtract_power(magnitudeArray) {
 function xtract_odd_even_ratio(harmonicSpectrum, f0) {
     if (!xtract_assert_array(harmonicSpectrum))
         return 0;
-    if (typeof f0 !== "number") {
-        console.error("spectral_inharmonicity requires f0 to be defined.");
-        return null;
-    }
+    (function (f0) {
+        if (typeof f0 !== "number") {
+            throw ("spectral_inharmonicity requires f0 to be defined.");
+        }
+    })(f0);
     var h = 0,
         odd = 0.0,
         even = 0.0,
@@ -3526,9 +3280,8 @@ function xtract_odd_even_ratio(harmonicSpectrum, f0) {
 
     if (odd === 0.0 || even === 0.0) {
         return 0.0;
-    } else {
-        return odd / even;
     }
+    return odd / even;
 }
 
 function xtract_sharpness(barkBandsArray) {
@@ -3568,64 +3321,38 @@ function xtract_spectral_slope(spectrum) {
     return (1.0 / A) * (M * FA - F * A) / (M * FXTRACT_SQ - F * F);
 }
 
+function xtract_lowhigh(data, threshold) {
+    var r = {
+        min: null,
+        max: null
+    };
+    for (var n = 0; n < data.length; n++) {
+        if (data[n] > threshold) {
+            r.min = Math.min(r.min, data[n]);
+        }
+        if (data[n] < threshold) {
+            r.max = Math.max(r.max, data[n]);
+        }
+    }
+    return r;
+}
+
 function xtract_lowest_value(data, threshold) {
     if (!xtract_assert_array(data))
         return 0;
-    if (data.filter && data.reduce) {
-        var interim;
-        if (typeof threshold === "number") {
-            interim = data.filter(function (a) {
-                return a > threshold;
-            });
-            if (interim.length === 0) {
-                return +Infinity;
-            }
-        } else {
-            interim = data;
-        }
-        return xtract_array_min(interim);
-    } else {
-        if (typeof threshold !== "number") {
-            threshold = -Infinity;
-        }
-        var result = +Infinity;
-        for (var n = 0; n < data.length; n++) {
-            if (data[n] > threshold) {
-                result = Math.min(result, data[n]);
-            }
-        }
-        return result;
+    if (typeof threshold !== "number") {
+        threshold = -Infinity;
     }
+    return xtract_lowhigh(data, threshold).min;
 }
 
 function xtract_highest_value(data, threshold) {
     if (!xtract_assert_array(data))
         return 0;
-    if (data.filter && data.reduce) {
-        var interim;
-        if (typeof threshold === "number") {
-            interim = data.filter(function (a) {
-                return (a >= threshold);
-            });
-            if (interim.length === 0) {
-                return +Infinity;
-            }
-        } else {
-            interim = data;
-        }
-        return xtract_array_max(interim);
-    } else {
-        if (typeof threshold !== "number") {
-            threshold = -Infinity;
-        }
-        var result = +Infinity;
-        for (var n = 0; n < data.length; n++) {
-            if (data[n] >= threshold) {
-                result = Math.max(result, data[n]);
-            }
-        }
-        return result;
+    if (typeof threshold !== "number") {
+        threshold = +Infinity;
     }
+    return xtract_lowhigh(data, threshold).max;
 }
 
 function xtract_sum(data) {
@@ -3655,13 +3382,27 @@ function xtract_nonzero_count(data) {
 }
 
 function xtract_hps(spectrum) {
+    function get_peak_index(M, amps) {
+        var peak_index = 0,
+            peak = 0,
+            i;
+        var tempProduct = new Float64Array(M);
+        tempProduct.forEach(function (e, i, a) {
+            a[i] = amps[i] * amps[i * 2] * amps[i * 3];
+        });
+        tempProduct.forEach(function (v, i) {
+            if (v > peak) {
+                peak = v;
+                peak_index = i;
+            }
+        });
+        return peak_index;
+    }
     if (!xtract_assert_array(spectrum))
         return 0;
     var peak_index = 0,
         position1_lwr = 0,
         largest1_lwr = 0,
-        tempProduct = 0,
-        peak = 0,
         ratio1 = 0;
     var N = spectrum.length;
     var K = N >> 1;
@@ -3670,17 +3411,10 @@ function xtract_hps(spectrum) {
     var M = Math.ceil(K / 3.0);
     var i;
     if (M <= 1) {
-        console.error("Input Data is too short for HPS");
-        return null;
+        throw ("Input Data is too short for HPS");
     }
 
-    for (i = 0; i < M; ++i) {
-        tempProduct = amps[i] * amps[i * 2] * amps[i * 3];
-        if (tempProduct > peak) {
-            peak = tempProduct;
-            peak_index = i;
-        }
-    }
+    peak_index = get_peak_index(M, amps);
 
     for (i = 0; i < K; i++) {
         if (amps[i] > largest1_lwr && i !== peak_index) {
@@ -3698,6 +3432,14 @@ function xtract_hps(spectrum) {
 }
 
 function xtract_f0(timeArray, sampleRate) {
+    function calc_err_tau_x(sub_arr, M, tau) {
+        var err_tau = 0.0,
+            n;
+        for (n = 1; n < M; n++) {
+            err_tau += Math.abs(sub_arr[n] - sub_arr[n + tau]);
+        }
+        return err_tau;
+    }
     if (!xtract_assert_array(timeArray))
         return 0;
     if (typeof sampleRate !== "number") {
@@ -3710,7 +3452,6 @@ function xtract_f0(timeArray, sampleRate) {
 
     var threshold_peak = 0.8,
         threshold_centre = 0.3,
-        err_tau_1 = 0,
         array_max = 0;
 
     array_max = xtract_array_max(sub_arr);
@@ -3719,18 +3460,13 @@ function xtract_f0(timeArray, sampleRate) {
 
     sub_arr = xtract_array_bound(sub_arr, -threshold_peak, threshold_peak);
 
-    for (n = 0; n < sub_arr.length; n++) {
-        sub_arr[n] = Math.max(0, sub_arr[n] - threshold_centre);
-    }
+    sub_arr.forEach(function (v, i, a) {
+        a[i] = Math.max(0, v - threshold_centre);
+    });
 
-    for (n = 1; n < M; n++) {
-        err_tau_1 += Math.abs(sub_arr[n] - sub_arr[n + 1]);
-    }
+    var err_tau_1 = calc_err_tau_x(sub_arr, M, 1);
     for (var tau = 2; tau < M; tau++) {
-        var err_tau_x = 0;
-        for (n = 1; n < M; n++) {
-            err_tau_x += Math.abs(sub_arr[n] - sub_arr[n + tau]);
-        }
+        var err_tau_x = calc_err_tau_x(sub_arr, M, tau);
         if (err_tau_x < err_tau_1) {
             return sampleRate / (tau + (err_tau_x / err_tau_1));
         }
@@ -3742,7 +3478,7 @@ function xtract_failsafe_f0(timeArray, sampleRate) {
     return xtract_f0(timeArray, sampleRate);
 }
 
-function xtract_wavelet_f0(timeArray, sampleRate, pitchtracker) {
+function xtract_wavelet_f0(timeArray, sampleRate, pitchtracker) { // eslint-disable-line max-statements
     if (!xtract_assert_array(timeArray))
         return 0;
     if (pitchtracker === undefined) {
@@ -3821,176 +3557,123 @@ function xtract_wavelet_f0(timeArray, sampleRate, pitchtracker) {
         return nbSam;
     }
 
-    var _minmax = {
-        index: undefined,
-        next: undefined
-    };
-    //_dywapitch_computeWaveletPitch(samples, startsample, samplecount)
-    var samples = timeArray,
-        startsample = 0,
-        samplecount = timeArray.length;
-    var pitchF = 0.0;
-    var i, j, si, si1;
-
-    samplecount = _floor_power2(samplecount);
-    var sam = new Float64Array(samplecount);
-    for (i = 0; i < samplecount; i++) {
-        sam[i] = samples[i];
-    }
-
-    var curSamNb = samplecount;
-
-    var distances = new Int32Array(samplecount);
-    var mins = new Int32Array(samplecount);
-    var maxs = new Int32Array(samplecount);
-    var nbMins, nbMaxs;
-
-    var maxFLWTlevels = 6;
-    var maxF = 3000;
-    var differenceLevelsN = 3;
-    var maximaThresholdRatio = 0.75;
-
-    var ampltitudeThreshold;
-    var theDC = 0.0;
-    var maxValue = 0.0;
-    var minValue = 0.0;
-    for (i = 0; i < samplecount; i++) {
-        si = sam[i];
-        theDC = theDC + si;
-        if (si > maxValue) {
-            maxValue = si;
-        }
-        if (si < minValue) {
-            minValue = si;
-        }
-    }
-    theDC = theDC / samplecount;
-    maxValue = maxValue - theDC;
-    minValue = minValue - theDC;
-    var amplitudeMax = (maxValue > -minValue ? maxValue : -minValue);
-
-    ampltitudeThreshold = amplitudeMax * maximaThresholdRatio;
-
-    var curLevel = 0;
-    var curModeDistance = -1;
-    var delta;
-
-    var cont = true;
-
-    while (cont) {
-        delta = Math.floor(44100 / (_2power(curLevel) * maxF));
+    function bodyLoop() { // eslint-disable-line max-statements
+        delta = Math.floor(44100 / (_2power(curLevel) * 3000));
         if (curSamNb < 2) {
             cont = false;
-            break;
+            return;
         }
-
         var dv, previousDV = -1000;
-        nbMins = nbMaxs = 0;
+        var nbMins = nbMaxs = 0;
         var lastMinIndex = -1000000;
         var lastmaxIndex = -1000000;
         var findMax = 0;
         var findMin = 0;
+        (function () { // eslint-disable-line complexity
+            for (i = 2; i < curSamNb; i++) {
+                si = sam[i] - theDC;
+                si1 = sam[i - 1] - theDC;
 
-        for (i = 2; i < curSamNb; i++) {
-            si = sam[i] - theDC;
-            si1 = sam[i - 1] - theDC;
+                if (si1 <= 0 && si > 0) {
+                    findMax = 1;
+                }
+                if (si1 >= 0 && si < 0) {
+                    findMin = 1;
+                }
 
-            if (si1 <= 0 && si > 0) {
-                findMax = 1;
-            }
-            if (si1 >= 0 && si < 0) {
-                findMin = 1;
-            }
+                // min or max ?
+                dv = si - si1;
 
-            // min or max ?
-            dv = si - si1;
+                if (previousDV > -1000) {
 
-            if (previousDV > -1000) {
+                    if (findMin && previousDV < 0 && dv >= 0) {
+                        // minimum
+                        if (Math.abs(si) >= ampltitudeThreshold) {
+                            if (i > lastMinIndex + delta) {
+                                mins[nbMins++] = i;
+                                lastMinIndex = i;
+                                findMin = 0;
+                            }
+                        }
+                    }
 
-                if (findMin && previousDV < 0 && dv >= 0) {
-                    // minimum
-                    if (Math.abs(si) >= ampltitudeThreshold) {
-                        if (i > lastMinIndex + delta) {
-                            mins[nbMins++] = i;
-                            lastMinIndex = i;
-                            findMin = 0;
+                    if (findMax && previousDV > 0 && dv <= 0) {
+                        // maximum
+                        if (Math.abs(si) >= ampltitudeThreshold) {
+                            if (i > lastmaxIndex + delta) {
+                                maxs[nbMaxs++] = i;
+                                lastmaxIndex = i;
+                                findMax = 0;
+                            }
                         }
                     }
                 }
 
-                if (findMax && previousDV > 0 && dv <= 0) {
-                    // maximum
-                    if (Math.abs(si) >= ampltitudeThreshold) {
-                        if (i > lastmaxIndex + delta) {
-                            maxs[nbMaxs++] = i;
-                            lastmaxIndex = i;
-                            findMax = 0;
-                        }
-                    }
-                }
+                previousDV = dv;
             }
-
-            previousDV = dv;
-        }
+        })();
 
         if (nbMins === 0 && nbMaxs === 0) {
             cont = false;
-            break;
+            return;
         }
 
         var d;
         //memset(distances, 0, samplecount*sizeof(int));
-        for (i = 0; i < samplecount; i++) {
-            distances[i] = 0.0;
-        }
-        for (i = 0; i < nbMins; i++) {
-            for (j = 1; j < differenceLevelsN; j++) {
-                if (i + j < nbMins) {
-                    d = _iabs(mins[i] - mins[i + j]);
-                    distances[d] = distances[d] + 1;
+        var distances = new Int32Array(samplecount);
+        (function () {
+            for (i = 0; i < nbMins; i++) {
+                for (j = 1; j < 3; j++) {
+                    if (i + j < nbMins) {
+                        d = _iabs(mins[i] - mins[i + j]);
+                        distances[d] = distances[d] + 1;
+                    }
                 }
             }
-        }
-        for (i = 0; i < nbMaxs; i++) {
-            for (j = 1; j < differenceLevelsN; j++) {
-                if (i + j < nbMaxs) {
-                    d = _iabs(maxs[i] - maxs[i + j]);
-                    //asLog("dywapitch i=%ld j=%ld d=%ld\n", i, j, d);
-                    distances[d] = distances[d] + 1;
+            for (i = 0; i < nbMaxs; i++) {
+                for (j = 1; j < 3; j++) {
+                    if (i + j < nbMaxs) {
+                        d = _iabs(maxs[i] - maxs[i + j]);
+                        //asLog("dywapitch i=%ld j=%ld d=%ld\n", i, j, d);
+                        distances[d] = distances[d] + 1;
+                    }
                 }
             }
-        }
+        })();
 
         var bestDistance = -1;
         var bestValue = -1;
-        for (i = 0; i < curSamNb; i++) {
-            var summed = 0;
-            for (j = -delta; j <= delta; j++) {
-                if (i + j >= 0 && i + j < curSamNb)
-                    summed += distances[i + j];
-            }
-            //asLog("dywapitch i=%ld summed=%ld bestDistance=%ld\n", i, summed, bestDistance);
-            if (summed === bestValue) {
-                if (i === 2 * bestDistance)
+        (function () {
+            for (i = 0; i < curSamNb; i++) {
+                var summed = 0;
+                for (j = -delta; j <= delta; j++) {
+                    if (i + j >= 0 && i + j < curSamNb)
+                        summed += distances[i + j];
+                }
+                //asLog("dywapitch i=%ld summed=%ld bestDistance=%ld\n", i, summed, bestDistance);
+                if (summed === bestValue) {
+                    if (i === 2 * bestDistance)
+                        bestDistance = i;
+
+                } else if (summed > bestValue) {
+                    bestValue = summed;
                     bestDistance = i;
-
-            } else if (summed > bestValue) {
-                bestValue = summed;
-                bestDistance = i;
-            }
-        }
-
-        var distAvg = 0.0;
-        var nbDists = 0;
-        for (j = -delta; j <= delta; j++) {
-            if (bestDistance + j >= 0 && bestDistance + j < samplecount) {
-                var nbDist = distances[bestDistance + j];
-                if (nbDist > 0) {
-                    nbDists += nbDist;
-                    distAvg += (bestDistance + j) * nbDist;
                 }
             }
-        }
+        })();
+        var distAvg = 0.0;
+        var nbDists = 0;
+        (function () {
+            for (j = -delta; j <= delta; j++) {
+                if (bestDistance + j >= 0 && bestDistance + j < samplecount) {
+                    var nbDist = distances[bestDistance + j];
+                    if (nbDist > 0) {
+                        nbDists += nbDist;
+                        distAvg += (bestDistance + j) * nbDist;
+                    }
+                }
+            }
+        })();
         // this is our mode distance !
         distAvg /= nbDists;
 
@@ -4003,7 +3686,7 @@ function xtract_wavelet_f0(timeArray, sampleRate, pitchtracker) {
                 // two consecutive similar mode distances : ok !
                 pitchF = 44100 / (_2power(curLevel - 1) * curModeDistance);
                 cont = false;
-                break;
+                return;
             }
             //if DEBUGG then put "similarity="&similarity&&"delta="&delta&&"not"
         }
@@ -4012,27 +3695,28 @@ function xtract_wavelet_f0(timeArray, sampleRate, pitchtracker) {
         curModeDistance = distAvg;
 
         curLevel = curLevel + 1;
-        if (curLevel >= maxFLWTlevels) {
+        if (curLevel >= 6) {
             // put "max levels reached, exiting"
             //asLog("dywapitch max levels reached, exiting\n");
             cont = false;
-            break;
+            return;
         }
 
         // downsample
         if (curSamNb < 2) {
             //asLog("dywapitch not enough samples, exiting\n");
             cont = false;
-            break;
+            return;
         }
-        for (i = 0; i < curSamNb / 2; i++) {
-            sam[i] = (sam[2 * i] + sam[2 * i + 1]) / 2.0;
-        }
+        (function () {
+            for (i = 0; i < curSamNb / 2; i++) {
+                sam[i] = (sam[2 * i] + sam[2 * i + 1]) / 2.0;
+            }
+        })();
         curSamNb /= 2;
     }
 
-    //_dywapitch_dynamicprocess(pitchtracker, pitch)
-    return (function (pitchtracker, pitch) {
+    function _dywapitch_dynamicprocess(pitchtracker, pitch) { // eslint-disable-line complexity
         if (pitch === 0.0) {
             return -1.0;
         }
@@ -4097,7 +3781,70 @@ function xtract_wavelet_f0(timeArray, sampleRate, pitchtracker) {
             pitch = 0.0;
         }
         return pitch;
-    })(pitchtracker, pitchF);
+    }
+
+    var _minmax = {
+        index: undefined,
+        next: undefined
+    };
+    //_dywapitch_computeWaveletPitch(samples, startsample, samplecount)
+    var samples = timeArray,
+        startsample = 0,
+        samplecount = timeArray.length;
+    var pitchF = 0.0;
+    var i, j, si, si1;
+
+    samplecount = _floor_power2(samplecount);
+    var sam = new Float64Array(samplecount);
+    for (i = 0; i < samplecount; i++) {
+        sam[i] = samples[i];
+    }
+
+    var curSamNb = samplecount;
+
+    var mins = new Int32Array(samplecount);
+    var maxs = new Int32Array(samplecount);
+
+    //var maxFLWTlevels = 6;
+    //var maxF = 3000;
+    //var differenceLevelsN = 3;
+    //var maximaThresholdRatio = 0.75;
+    var theDC = getTheDC(sam, samplecount);
+
+    function getTheDC(sam, samplecount) {
+        return xtract_mean(sam.subarray(samplecount));
+    }
+
+    function getamplitudeMax(sam, samplecount) {
+        var si, i;
+        var minValue = maxValue = 0.0;
+        for (i = 0; i < samplecount; i++) {
+            si = sam[i];
+            if (si > maxValue) {
+                maxValue = si;
+            }
+            if (si < minValue) {
+                minValue = si;
+            }
+        }
+        maxValue = maxValue - theDC;
+        minValue = minValue - theDC;
+        return (maxValue > -minValue ? maxValue : -minValue);
+    }
+    var ampltitudeThreshold = getamplitudeMax(sam, samplecount) * 0.75;
+
+    var curLevel = 0;
+    var curModeDistance = -1;
+    var delta;
+
+    var cont = true;
+
+    while (cont) {
+        bodyLoop();
+    }
+
+    //_dywapitch_dynamicprocess(pitchtracker, pitch)
+    return _dywapitch_dynamicprocess(pitchtracker, pitchF);
 }
 
 function xtract_midicent(f0) {
@@ -4199,18 +3946,17 @@ function xtract_energy(array, sample_rate, window_ms) {
 }
 
 function xtract_spectrum(array, sample_rate, withDC, normalise) {
-    if (!xtract_assert_array(array))
+    (function (array, sample_rate) {
+        if (typeof sample_rate !== "number") {
+            throw ("Sample Rate must be defined");
+        }
+    })(array, sample_rate);
+    if (!xtract_assert_array(array)) {
         return 0;
-    if (typeof sample_rate !== "number") {
-        console.error("Sample Rate must be defined");
-        return null;
     }
-    if (withDC === undefined) {
-        withDC = false;
-    }
-    if (normalise === undefined) {
-        normalise = false;
-    }
+    withDC = (withDC === true);
+    normalise = (normalise === true);
+
     var N = array.length;
     var result, align = 0;
     var amps;
@@ -4225,9 +3971,9 @@ function xtract_spectrum(array, sample_rate, withDC, normalise) {
     freqs = result.subarray(result.length / 2);
     var reals = new Float64Array(N);
     var imags = new Float64Array(N);
-    for (var i = 0; i < N; i++) {
-        reals[i] = array[i];
-    }
+    array.forEach(function (v, i) {
+        reals[i] = v;
+    });
     transform(reals, imags);
     for (var k = align; k <= result.length / 2; k++) {
         amps[k - align] = Math.sqrt((reals[k] * reals[k]) + (imags[k] * imags[k])) / array.length;
@@ -4277,28 +4023,27 @@ function xtract_complex_spectrum(array, sample_rate, withDC) {
 function xtract_mfcc(spectrum, mfcc) {
     if (!xtract_assert_array(spectrum))
         return 0;
-    if (typeof mfcc !== "object") {
-        throw ("Invalid MFCC, must be MFCC object built using xtract_init_mfcc");
-    }
-    if (mfcc.n_filters === 0) {
-        throw ("Invalid MFCC, object must be built using xtract_init_mfcc");
-    }
     var K = spectrum.length >> 1;
-    if (mfcc.filters[0].length !== K) {
-        throw ("Lengths do not match");
-    }
+    (function (mfcc) {
+        if (typeof mfcc !== "object") {
+            throw ("Invalid MFCC, must be MFCC object built using xtract_init_mfcc");
+        }
+        if (mfcc.n_filters === 0) {
+            throw ("Invalid MFCC, object must be built using xtract_init_mfcc");
+        }
+        if (mfcc.filters[0].length !== K) {
+            throw ("Lengths do not match");
+        }
+    })(mfcc);
     var result = new Float64Array(mfcc.n_filters);
-    for (var f = 0; f < mfcc.n_filters; f++) {
-        result[f] = 0.0;
+    result.forEach(function (v, f, r) {
+        r[f] = 0.0;
         var filter = mfcc.filters[f];
         for (var n = 0; n < filter.length; n++) {
-            result[f] += spectrum[n] * filter[n];
+            r[f] += spectrum[n] * filter[n];
         }
-        if (result[f] < 2e-42) {
-            result[f] = 2e-42;
-        }
-        result[f] = Math.log(result[f]);
-    }
+        r[f] = Math.log(Math.max(r[f], 2e-42));
+    });
     return xtract_dct(result);
 }
 
@@ -4506,25 +4251,27 @@ function xtract_lpc(autocorr) {
         return lpc;
     }
 
-    for (i = 0; i < L; i++) {
-        r = -autocorr[i + 1];
-        for (j = 0; j < i; j++) {
-            r -= lpc[j] * autocorr[i - j];
-        }
-        r /= error;
-        ref[i] = r;
+    (function () {
+        for (i = 0; i < L; i++) {
+            r = -autocorr[i + 1];
+            for (j = 0; j < i; j++) {
+                r -= lpc[j] * autocorr[i - j];
+            }
+            r /= error;
+            ref[i] = r;
 
-        lpc[i] = r;
-        for (j = 0; j < (i >> 1); j++) {
-            var tmp = lpc[j];
-            lpc[j] += r * lpc[i - 1 - j];
-            lpc[i - 1 - j] += r * tmp;
+            lpc[i] = r;
+            for (j = 0; j < (i >> 1); j++) {
+                var tmp = lpc[j];
+                lpc[j] += r * lpc[i - 1 - j];
+                lpc[i - 1 - j] += r * tmp;
+            }
+            if (i % 2) {
+                lpc[j] += lpc[j] * r;
+            }
+            error *= 1.0 - r * r;
         }
-        if (i % 2) {
-            lpc[j] += lpc[j] * r;
-        }
-        error *= 1.0 - r * r;
-    }
+    })();
     return lpc;
 }
 
@@ -4540,21 +4287,24 @@ function xtract_lpcc(lpc, Q) {
     cep_length = Q;
 
     var result = new Float64Array(cep_length);
-    for (n = 1; n < Q && n < cep_length; n++) {
-        sum = 0;
-        for (k = 1; k < n; k++) {
-            sum += k * result[k - 1] * lpc[n - k];
+    (function () {
+        for (n = 1; n < Q && n < cep_length; n++) {
+            sum = 0;
+            for (k = 1; k < n; k++) {
+                sum += k * result[k - 1] * lpc[n - k];
+            }
+            result[n - 1] = lpc[n] + sum / n;
         }
-        result[n - 1] = lpc[n] + sum / n;
-    }
-
-    for (n = order + 1; n <= cep_length; n++) {
-        sum = 0.0;
-        for (k = n - (order - 1); k < n; k++) {
-            sum += k * result[k - 1] * lpc[n - k];
+    })();
+    (function () {
+        for (n = order + 1; n <= cep_length; n++) {
+            sum = 0.0;
+            for (k = n - (order - 1); k < n; k++) {
+                sum += k * result[k - 1] * lpc[n - k];
+            }
+            result[n - 1] = sum / n;
         }
-        result[n - 1] = sum / n;
-    }
+    })();
     return result;
 }
 
@@ -4599,28 +4349,6 @@ function xtract_yin(array) {
 }
 
 function xtract_onset(timeData, frameSize) {
-    if (!xtract_assert_array(timeData))
-        return 0;
-    if (frameSize === undefined) {
-        throw ("All arguments for xtract_onset must be defined: xtract_onset(timeData, frameSize)");
-    }
-
-    var frames = xtract_get_data_frames(timeData, frameSize, frameSize, false);
-    var N = frames.length;
-    var X = [];
-    var real = new Float64Array(frameSize);
-    var imag = new Float64Array(frameSize);
-    var K = frameSize / 2 + 1;
-    var n;
-    for (var i = 0; i < N; i++) {
-        for (n = 0; n < frameSize; n++) {
-            real[n] = frames[i][n];
-            imag[n] = 0.0;
-        }
-        transform(real, imag);
-        X[i] = xtract_array_interlace([real.subarray(0, K), imag.subarray(0, K)]);
-    }
-
     function angle(real, imag) {
         if (imag === undefined && real.length === 2) {
             return Math.atan2(real[1], real[0]);
@@ -4649,6 +4377,34 @@ function xtract_onset(timeData, frameSize) {
         result[1] = cplx_pair_A[0] * cplx_pair_B[1] + cplx_pair_A[1] * cplx_pair_B[0];
         return result;
     }
+
+    function get_X(frames, frameSize) {
+        var N = frames.length;
+        var X = [];
+        var real = new Float64Array(frameSize);
+        var imag = new Float64Array(frameSize);
+        var K = frameSize / 2 + 1;
+        var n;
+        for (var i = 0; i < N; i++) {
+            for (n = 0; n < frameSize; n++) {
+                real[n] = frames[i][n];
+                imag[n] = 0.0;
+            }
+            transform(real, imag);
+            X[i] = xtract_array_interlace([real.subarray(0, K), imag.subarray(0, K)]);
+        }
+        return X;
+    }
+
+    if (!xtract_assert_array(timeData))
+        return 0;
+    if (frameSize === undefined) {
+        throw ("All arguments for xtract_onset must be defined: xtract_onset(timeData, frameSize)");
+    }
+    var frames = xtract_get_data_frames(timeData, frameSize, frameSize, false);
+    var N = frames.length;
+    var K = frameSize / 2 + 1;
+    var X = get_X(frames, frameSize);
 
     var E = new timeData.constructor(N);
     for (var k = 0; k < K; k++) {
@@ -4765,7 +4521,7 @@ function xtract_resample(data, p, q, n) {
         return w;
     }
 
-    function overlap(X, b) {
+    function overlap(X, b) { // eslint-disable-line max-statements
         var i, f;
         var Y = new Float64Array(X.length);
         var N = b.length;
@@ -4876,6 +4632,45 @@ function xtract_init_dct(N) {
 }
 
 function xtract_init_mfcc(N, nyquist, style, freq_min, freq_max, freq_bands) {
+    function get_fft_peak(freq_max, freq_min, freq_bands, nyquist, style) {
+        var norm = 1,
+            M = N / 2,
+            height, norm_fact, n;
+        var mel_freq_max = 1127 * Math.log(1 + freq_max / 700);
+        var mel_freq_min = 1127 * Math.log(1 + freq_min / 700);
+        var freq_bw_mel = (mel_freq_max - mel_freq_min) / freq_bands;
+
+        var mel_peak = new Float64Array(freq_bands + 2);
+        var lin_peak = new Float64Array(freq_bands + 2);
+        var fft_peak = new Float64Array(freq_bands + 2);
+        var height_norm = new Float64Array(freq_bands);
+        mel_peak[0] = mel_freq_min;
+        lin_peak[0] = freq_min;
+        fft_peak[0] = Math.floor(lin_peak[0] / nyquist * M);
+
+        for (n = 1; n < (freq_bands + 2); ++n) {
+            //roll out peak locations - mel, linear and linear on fft window scale
+            mel_peak[n] = mel_peak[n - 1] + freq_bw_mel;
+            lin_peak[n] = 700 * (Math.exp(mel_peak[n] / 1127) - 1);
+            fft_peak[n] = Math.floor(lin_peak[n] / nyquist * M);
+        }
+
+        for (n = 0; n < freq_bands; n++) {
+            //roll out normalised gain of each peak
+            if (style === "XTRACT_EQUAL_GAIN") {
+                height = 1;
+                norm_fact = norm;
+            } else {
+                height = 2 / (lin_peak[n + 2] - lin_peak[n]);
+                norm_fact = norm / (2 / (lin_peak[2] - lin_peak[0]));
+            }
+            height_norm[n] = height * norm_fact;
+        }
+        return {
+            f: fft_peak,
+            h: height_norm
+        };
+    }
     var mfcc = {
         n_filters: freq_bands,
         filters: []
@@ -4887,39 +4682,12 @@ function xtract_init_mfcc(N, nyquist, style, freq_min, freq_max, freq_bands) {
     if (freq_bands <= 1) {
         return null;
     }
-    var mel_freq_max = 1127 * Math.log(1 + freq_max / 700);
-    var mel_freq_min = 1127 * Math.log(1 + freq_min / 700);
-    var freq_bw_mel = (mel_freq_max - mel_freq_min) / freq_bands;
-
-    var mel_peak = new Float64Array(freq_bands + 2);
-    var lin_peak = new Float64Array(freq_bands + 2);
-    var fft_peak = new Float64Array(freq_bands + 2);
-    var height_norm = new Float64Array(freq_bands);
-    mel_peak[0] = mel_freq_min;
-    lin_peak[0] = freq_min;
-    fft_peak[0] = Math.floor(lin_peak[0] / nyquist * M);
-
-    for (n = 1; n < (freq_bands + 2); ++n) {
-        //roll out peak locations - mel, linear and linear on fft window scale
-        mel_peak[n] = mel_peak[n - 1] + freq_bw_mel;
-        lin_peak[n] = 700 * (Math.exp(mel_peak[n] / 1127) - 1);
-        fft_peak[n] = Math.floor(lin_peak[n] / nyquist * M);
-    }
-
-    for (n = 0; n < freq_bands; n++) {
-        //roll out normalised gain of each peak
-        if (style === "XTRACT_EQUAL_GAIN") {
-            height = 1;
-            norm_fact = norm;
-        } else {
-            height = 2 / (lin_peak[n + 2] - lin_peak[n]);
-            norm_fact = norm / (2 / (lin_peak[2] - lin_peak[0]));
-        }
-        height_norm[n] = height * norm_fact;
-    }
 
     var i = 0,
+        fh = get_fft_peak(freq_max, freq_min, freq_bands, nyquist, style),
         inc;
+    var fft_peak = fh.f,
+        height_norm = fh.h;
     var next_peak;
     for (n = 0; n < freq_bands; n++) {
         // calculate the rise increment
@@ -4959,17 +4727,18 @@ function xtract_init_wavelet() {
 }
 
 function xtract_init_pcp(N, fs, f_ref) {
-    if (typeof fs !== "number" || typeof N !== "number") {
-        throw ('The Sample Rate and sample count have to be defined: xtract_init_pcp(N, fs, f_ref)');
-    }
-    if (N <= 0 || N !== Math.floor(N)) {
-        throw ("The sample count, N, must be a positive integer: xtract_init_pcp(N, fs, f_ref)");
-    }
-    if (fs <= 0.0) {
-        throw ('The Sample Rate must be a positive number: xtract_init_pcp(N, fs, f_ref)');
-    }
+    (function (N, fs) {
+        if (typeof fs !== "number" || typeof N !== "number") {
+            throw ('The Sample Rate and sample count have to be defined: xtract_init_pcp(N, fs, f_ref)');
+        }
+        if (N <= 0 || N !== Math.floor(N)) {
+            throw ("The sample count, N, must be a positive integer: xtract_init_pcp(N, fs, f_ref)");
+        }
+        if (fs <= 0.0) {
+            throw ('The Sample Rate must be a positive number: xtract_init_pcp(N, fs, f_ref)');
+        }
+    })(N, fs);
     if (typeof f_ref !== "number" || f_ref <= 0.0 || f_ref >= fs / 2) {
-        //("Assuming f_ref to be 48.9994294977Hz");
         f_ref = 48.9994294977;
     }
 
@@ -4992,6 +4761,89 @@ function xtract_init_bark(N, sampleRate, bands) {
         band_limits[bands] = (edges[bands] / sampleRate) * N;
     }
     return band_limits;
+}
+
+// Window functions
+
+function xtract_apply_window(X, W) {
+    (function (X, W) {
+        if (!xtract_assert_array(X) || !xtract_assert_array(W)) {
+            throw ("Both X and W must be defined");
+        }
+        if (X.length !== W.length) {
+            throw ("Both X and W must be the same lengths");
+        }
+    })(X, W);
+    var N = X.length;
+    var Y = new Float64Array(N);
+    var n;
+    for (n = 0; n < N; n++) {
+        Y[n] = X[n] * W[n];
+    }
+    return Y;
+}
+
+function xtract_create_window(N, type) {
+    function welch(N) {
+        var W = new Float64Array(N);
+        var n;
+        var N12 = (N - 1) / 2;
+        for (n = 0; n < N; n++) {
+            W[n] = 1.0 - Math.pow((n - N12) / N12, 2);
+        }
+        return W;
+    }
+
+    function sine(N) {
+        var w = new Float64Array(N),
+            n;
+        var arga = (Math.PI * n) / (N - 1);
+        for (n = 0; n < N; n++) {
+            w[n] = Math.sin(arga);
+        }
+        return w;
+    }
+
+    function hann(N) {
+        var w = new Float64Array(N),
+            n;
+        for (n = 0; n < N; n++) {
+            w[n] = 0.5 - (1 - Math.cos((Math.PI * 2 * n) / (N - 1)));
+        }
+        return w;
+    }
+
+    function hamming(N) {
+        var w = new Float64Array(N),
+            alpha = 25 / 46,
+            beta = 21 / 46,
+            n;
+        for (n = 0; n < N; n++) {
+            w[n] = alpha - beta * Math.cos((Math.PI * 2 * n) / (N - 1));
+        }
+        return w;
+    }
+    (function (N, type) {
+        if (!xtract_assert_positive_integer(N)) {
+            throw ("N must be a defined, positive integer");
+        }
+        if (typeof type !== "string" || type.length === 0) {
+            throw ("Type must be defined");
+        }
+    })(N, type);
+    type = type.toLowerCase();
+    switch (type) {
+        case "hamming":
+            return hamming(N);
+        case "welch":
+            return welch(N);
+        case "sine":
+            return sine(N);
+        case "hann":
+            return hann(N);
+        default:
+            throw ("Window function\"" + type + "\" not defined");
+    }
 }
 
 /* 
@@ -5050,43 +4902,42 @@ function inverseTransform(real, imag) {
  * Computes the discrete Fourier transform (DFT) of the given complex vector, storing the result back into the vector.
  * The vector's length must be a power of 2. Uses the Cooley-Tukey decimation-in-time radix-2 algorithm.
  */
+
 function transformRadix2(real, imag) {
     // Initialization
-    var i, j, k;
     if (real.length !== imag.length)
         throw "Mismatched lengths";
     var n = real.length;
     if (n === 1) // Trivial transform
         return;
-    var levels = -1;
-    for (i = 0; i < 32; i++) {
-        if (1 << i === n)
-            levels = i; // Equal to log2(n)
-    }
+    var levels = calculateNumberLevels(n);
     if (levels === -1)
         throw "Length is not a power of 2";
-    var cosTable = new Array(n / 2);
-    var sinTable = new Array(n / 2);
-    for (i = 0; i < n / 2; i++) {
-        cosTable[i] = Math.cos(2 * Math.PI * i / n);
-        sinTable[i] = Math.sin(2 * Math.PI * i / n);
-    }
+    var cosTable = new Float64Array(n / 2);
+    var sinTable = new Float64Array(n / 2);
+    calculateCosSineTables(cosTable, sinTable);
 
     // Bit-reversed addressing permutation
-    for (i = 0; i < n; i++) {
-        j = reverseBits(i, levels);
-        if (j > i) {
-            var temp = real[i];
-            real[i] = real[j];
-            real[j] = temp;
-            temp = imag[i];
-            imag[i] = imag[j];
-            imag[j] = temp;
-        }
-    }
+    bitReverseMap(real, imag);
 
     // Cooley-Tukey decimation-in-time radix-2 FFT
     for (var size = 2; size <= n; size *= 2) {
+        cooleyTukey(real, imag, sinTable, cosTable, size);
+    }
+
+    // Returns the integer whose value is the reverse of the lowest 'bits' bits of the integer 'x'.
+    function reverseBits(x, bits) {
+        var y = 0;
+        for (var i = 0; i < bits; i++) {
+            y = (y << 1) | (x & 1);
+            x >>>= 1;
+        }
+        return y;
+    }
+
+    function cooleyTukey(real, imag, sinTable, cosTable, size) {
+        var i, j, k;
+        var n = real.length;
         var halfsize = size / 2;
         var tablestep = n / size;
         for (i = 0; i < n; i += size) {
@@ -5101,14 +4952,38 @@ function transformRadix2(real, imag) {
         }
     }
 
-    // Returns the integer whose value is the reverse of the lowest 'bits' bits of the integer 'x'.
-    function reverseBits(x, bits) {
-        var y = 0;
-        for (var i = 0; i < bits; i++) {
-            y = (y << 1) | (x & 1);
-            x >>>= 1;
+    function calculateNumberLevels(N) {
+        var i;
+        for (i = 0; i < 32; i++) {
+            if (1 << i === N) {
+                return i;
+            }
         }
-        return y;
+        return -1;
+    }
+
+    function bitReverseMap(real, imag) {
+        var i, j, temp;
+        for (i = 0; i < n; i++) {
+            j = reverseBits(i, levels);
+            if (j > i) {
+                temp = real[i];
+                real[i] = real[j];
+                real[j] = temp;
+                temp = imag[i];
+                imag[i] = imag[j];
+                imag[j] = temp;
+            }
+        }
+    }
+
+    function calculateCosSineTables(cosTable, sinTable) {
+        var n = cosTable.length,
+            i;
+        for (i = 0; i < n; i++) {
+            cosTable[i] = Math.cos(Math.PI * i / n);
+            sinTable[i] = Math.sin(Math.PI * i / n);
+        }
     }
 }
 
@@ -5129,37 +5004,36 @@ function transformBluestein(real, imag) {
         m *= 2;
 
     // Trignometric tables
-    var cosTable = new Array(n);
-    var sinTable = new Array(n);
-    for (i = 0; i < n; i++) {
-        j = i * i % (n * 2); // This is more accurate than j = i * i
-        cosTable[i] = Math.cos(Math.PI * j / n);
-        sinTable[i] = Math.sin(Math.PI * j / n);
-    }
+    var cosTable = new Float64Array(n);
+    var sinTable = new Float64Array(n);
+    (function (cosTable, sinTable) {
+        for (i = 0; i < n; i++) {
+            j = i * i % (n * 2); // This is more accurate than j = i * i
+            cosTable[i] = Math.cos(Math.PI * j / n);
+            sinTable[i] = Math.sin(Math.PI * j / n);
+        }
+    })(cosTable, sinTable);
 
     // Temporary vectors and preprocessing
-    var areal = new Array(m);
-    var aimag = new Array(m);
+    var areal = new Float64Array(m);
+    var aimag = new Float64Array(m);
+
     for (i = 0; i < n; i++) {
         areal[i] = real[i] * cosTable[i] + imag[i] * sinTable[i];
         aimag[i] = -real[i] * sinTable[i] + imag[i] * cosTable[i];
     }
-    for (i = n; i < m; i++)
-        areal[i] = aimag[i] = 0;
-    var breal = new Array(m);
-    var bimag = new Array(m);
+    var breal = new Float64Array(m);
+    var bimag = new Float64Array(m);
     breal[0] = cosTable[0];
     bimag[0] = sinTable[0];
     for (i = 1; i < n; i++) {
         breal[i] = breal[m - i] = cosTable[i];
         bimag[i] = bimag[m - i] = sinTable[i];
     }
-    for (i = n; i <= m - n; i++)
-        breal[i] = bimag[i] = 0;
 
     // Convolution
-    var creal = new Array(m);
-    var cimag = new Array(m);
+    var creal = new Float64Array(m);
+    var cimag = new Float64Array(m);
     convolveComplex(areal, aimag, breal, bimag, creal, cimag);
 
     // Postprocessing
@@ -5187,8 +5061,10 @@ function convolveReal(x, y, out) {
  * Computes the circular convolution of the given complex vectors. Each vector's length must be the same.
  */
 function convolveComplex(xreal, ximag, yreal, yimag, outreal, outimag) {
-    if (xreal.length !== ximag.length || xreal.length !== yreal.length || yreal.length !== yimag.length || xreal.length !== outreal.length || outreal.length !== outimag.length)
-        throw "Mismatched lengths";
+    (function () {
+        if (xreal.length !== ximag.length || xreal.length !== yreal.length || yreal.length !== yimag.length || xreal.length !== outreal.length || outreal.length !== outimag.length)
+            throw "Mismatched lengths";
+    })();
     var i;
     var n = xreal.length;
     xreal = xreal.slice();
@@ -5272,37 +5148,36 @@ var DataProto = function (N, sampleRate) {
     };
 
     this.toJSON = function () {
+        function lchar(str) {
+            var lastchar = str[str.length - 1];
+            if (lastchar !== '{' && lastchar !== ',') {
+                str = str + ', ';
+            }
+            return str;
+        }
+
+        function getJSONString(p, n) {
+            var str = "";
+            if (typeof p === "number" && isFinite(p)) {
+                str = '"' + n + '": ' + p;
+            } else if (typeof p === "object") {
+                if (p.toJSON) {
+                    str = '"' + n + '": ' + p.toJSON(p);
+                } else if (p.length) {
+                    str = '"' + n + '": ' + xtract_array_to_JSON(p);
+                } else {
+                    str = '"' + n + '": ' + this.toJSON(p);
+                }
+            } else {
+                str = '"' + n + '": "' + p.toString() + '"';
+            }
+            return str;
+        }
         var json = '{';
         for (var property in _result) {
             if (_result.hasOwnProperty(property)) {
-                var lastchar = json[json.length - 1];
-                if (lastchar !== '{' && lastchar !== ',') {
-                    json = json + ', ';
-                }
-                if (typeof _result[property] === "number" && isFinite(_result[property])) {
-                    json = json + '"' + property + '": ' + _result[property];
-                } else if (typeof _result[property] === "object") {
-                    switch (_result[property].constructor) {
-                        case Array:
-                        case Float32Array:
-                        case Float64Array:
-                            //Array data type
-                            json = json + '"' + property + '": ' + xtract_array_to_JSON(_result[property]);
-                            break;
-                        case TimeData:
-                        case SpectrumData:
-                        case PeakSpectrumData:
-                        case HarmonicSpectrumData:
-                            // JSXtract Data type
-                            json = json + '"' + property + '": ' + _result[property].toJSON(_result[property]);
-                            break;
-                        default:
-                            json = json + '"' + property + '": ' + this.toJSON(_result[property]);
-                            break;
-                    }
-                } else {
-                    json = json + '"' + property + '": "' + _result[property].toString() + '"';
-                }
+                json = lchar(json);
+                json = json + getJSONString(_result[property], property);
             }
         }
         return json + '}';
@@ -5317,34 +5192,35 @@ var DataProto = function (N, sampleRate) {
                 if (typeof a[param] === "number") {
                     delta[param] = a[param] - b[param];
                 } else {
-                    switch (a[param].constructor) {
-                        case Array:
-                        case Float32Array:
-                        case Float64Array:
-                            if (a[param].length === b[param].length) {
-                                delta[param] = new Float64Array(a[param].length);
-                            } else {
-                                delta[param] = [];
-                            }
-                            var n = 0;
-                            while (n < a[param].length && n < b[param].length) {
-                                delta[param][n] = a[param][n] - b[param][n];
-                                n++;
-                            }
-                            break;
-                        case TimeData:
-                        case SpectrumData:
-                        case PeakSpectrumData:
-                        case HarmonicSpectrumData:
-                            delta[param] = recursiveDelta(a[param].result, b[param].result);
-                            break;
-                        default:
-                            break;
-                    }
+                    delta[param] = deltaObject(a, b, param);
                 }
             }
         }
         return delta;
+    }
+
+    function deltaObject(a, b, param) {
+        if (a.result && b.result) {
+            return recursiveDelta(a[param].result, b[param].result);
+        } else if (a.length && b.length) {
+            return deltaArray(a[param], b[param])
+        }
+        return undefined;
+    }
+
+    function deltaArray(a, b) {
+        var d;
+        if (a.length === b.length) {
+            d = new Float64Array(a.length);
+        } else {
+            d = [];
+        }
+        var n = 0;
+        while (n < a.length && n < b.length) {
+            d[n] = a[n] - b[n];
+            n++;
+        }
+        return d;
     }
 
     this.computeDelta = function (compare) {
@@ -5416,7 +5292,7 @@ var TimeData = function (N, sampleRate, parent) {
     }
 
     _Fs = sampleRate;
-    _dct = this.createDctCoefficients(_length);
+    _dct = undefined;
     _wavelet = xtract_init_wavelet();
 
     this.zeroData = function () {
@@ -5626,6 +5502,9 @@ var TimeData = function (N, sampleRate, parent) {
         },
         "dct": {
             'value': function () {
+                if (_dct === undefined) {
+                    _dct = this.createDctCoefficients(_length);
+                }
                 if (this.result.dct === undefined) {
                     this.result.dct = xtract_dct_2(this.data, _dct);
                 }
@@ -5726,7 +5605,7 @@ var SpectrumData = function (N, sampleRate, parent) {
     var _length = N;
     var _Fs = sampleRate;
     var _f0;
-    var _mfcc, _bark, _dct = this.createDctCoefficients(_length);
+    var _mfcc, _bark, _dct;
 
     function computeFrequencies() {
         for (var i = 0; i < N; i++) {
@@ -5836,7 +5715,7 @@ var SpectrumData = function (N, sampleRate, parent) {
         "spectral_variance": {
             'value': function () {
                 if (this.result.spectral_variance === undefined) {
-                    this.result.spectral_variance = xtract_spectral_variance(this.data, this.spectral_mean());
+                    this.result.spectral_variance = xtract_spectral_variance(this.data, this.spectral_centroid());
                 }
                 return this.result.spectral_variance;
             }
@@ -5860,7 +5739,7 @@ var SpectrumData = function (N, sampleRate, parent) {
         "spectral_skewness": {
             'value': function () {
                 if (this.result.spectral_skewness === undefined) {
-                    this.result.spectral_skewness = xtract_spectral_skewness(this.data, this.spectral_mean(), this.spectral_standard_deviation());
+                    this.result.spectral_skewness = xtract_spectral_skewness(this.data, this.spectral_centroid(), this.spectral_standard_deviation());
                 }
                 return this.result.spectral_skewness;
             }
@@ -5868,7 +5747,7 @@ var SpectrumData = function (N, sampleRate, parent) {
         "spectral_kurtosis": {
             'value': function () {
                 if (this.result.spectral_kurtosis === undefined) {
-                    this.result.spectral_kurtosis = xtract_spectral_kurtosis(this.data, this.spectral_mean(), this.spectral_standard_deviation());
+                    this.result.spectral_kurtosis = xtract_spectral_kurtosis(this.data, this.spectral_centroid(), this.spectral_standard_deviation());
                 }
                 return this.result.spectral_kurtosis;
             }
@@ -6036,6 +5915,9 @@ var SpectrumData = function (N, sampleRate, parent) {
         },
         "dct": {
             'value': function () {
+                if (_dct === undefined) {
+                    _dct = this.createDctCoefficients(_length);
+                }
                 if (this.result.dct === undefined) {
                     this.result.dct = xtract_dct_2(_amps, _dct);
                 }
@@ -6720,18 +6602,17 @@ if (typeof AnalyserNode !== "undefined") {
 if (typeof AudioBuffer !== "undefined") {
 
     AudioBuffer.prototype.xtract_get_data_frames = function (frame_size, hop_size) {
-        if (typeof frame_size !== "number") {
-            throw ("xtract_get_data_frames requires the frame_size to be defined");
-        }
-        if (frame_size <= 0 || frame_size !== Math.floor(frame_size)) {
-            throw ("xtract_get_data_frames requires the frame_size to be a positive integer");
-        }
         if (hop_size === undefined) {
             hop_size = frame_size;
         }
-        if (hop_size <= 0 || hop_size !== Math.floor(hop_size)) {
-            throw ("xtract_get_data_frames requires the hop_size to be a positive integer");
-        }
+        (function () {
+            if (!xtract_assert_positive_integer(frame_size)) {
+                throw ("xtract_get_data_frames requires the frame_size to be defined, positive integer");
+            }
+            if (!xtract_assert_positive_integer(hop_size)) {
+                throw ("xtract_get_data_frames requires the hop_size to be a positive integer");
+            }
+        })();
         this.frames = [];
         var N = this.length;
         var K = this.xtract_get_number_of_frames(hop_size);
@@ -6753,39 +6634,29 @@ if (typeof AudioBuffer !== "undefined") {
         return xtract_get_number_of_frames(this, hop_size);
     };
 
-    AudioBuffer.prototype.xtract_get_frame = function (dst, channel, index, frame_size, hop_size) {
-        if (typeof dst !== "object" || dst.constructor !== Float32Array) {
-            throw ("dst must be a Float32Array object equal in length to hop_size");
-        }
-        if (typeof channel !== "number" || channel !== Math.floor(channel)) {
-            throw ("xtract_get_frame requires the channel to be an integer value");
-        }
-        if (typeof index !== "number" || index !== Math.floor(index)) {
-            throw ("xtract_get_frame requires the index to be an integer value");
-        }
-        if (typeof frame_size !== "number") {
-            throw ("xtract_get_frame requires the frame_size to be defined");
-        }
-        if (frame_size <= 0 || frame_size !== Math.floor(frame_size)) {
-            throw ("xtract_get_frame requires the frame_size to be a positive integer");
-        }
-        if (hop_size === undefined) {
-            hop_size = frame_size;
-        }
-        if (dst.length !== hop_size) {
-            throw ("dst must be a Float32Array object equal in length to hop_size");
-        }
-        if (hop_size <= 0 || hop_size !== Math.floor(hop_size)) {
-            throw ("xtract_get_frame requires the hop_size to be a positive integer");
-        }
+    AudioBuffer.prototype.xtract_get_frame = function (dst, channel, index, frame_size) {
+        (function () {
+            if (typeof dst !== "object" || dst.constructor !== Float32Array) {
+                throw ("dst must be a Float32Array object equal in length to hop_size");
+            }
+            if (!xtract_assert_positive_integer(channel)) {
+                throw ("xtract_get_frame requires the channel to be an integer value");
+            }
+            if (!xtract_assert_positive_integer(index)) {
+                throw ("xtract_get_frame requires the index to be an integer value");
+            }
+            if (!xtract_assert_positive_integer(frame_size)) {
+                throw ("xtract_get_frame requires the frame_size to be defined, positive integer");
+            }
+        })();
         if (channel < 0 || channel > this.numberOfChannels) {
             throw ("channel number " + channel + " out of bounds");
         }
-        var K = this.xtract_get_number_of_frames(hop_size);
+        var K = this.xtract_get_number_of_frames(frame_size);
         if (index < 0 || index >= K) {
             throw ("index number " + index + " out of bounds");
         }
-        return this.copyFromChannel(dst, channel, hop_size * index);
+        return this.copyFromChannel(dst, channel, frame_size * index);
     };
 
     AudioBuffer.prototype.xtract_process_frame_data = function () {
