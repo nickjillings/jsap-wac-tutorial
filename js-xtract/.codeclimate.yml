@@ -10,10 +10,6 @@ engines:
         enabled: true
   eslint:
     enabled: true
-    checks:
-      complexity:
-        enabled: true
-        max: 20
   fixme:
     enabled: true
 ratings:
@@ -22,3 +18,4 @@ ratings:
 exclude_paths:
 - "jsXtract.min.js"
 - "modules/chroma/*.json"
+- "test/*"

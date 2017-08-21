@@ -3,7 +3,7 @@
 /*globals importScripts, onmessage, TimeData, postMessage*/
 /*eslint-env browser */
 importScripts('js-xtract/jsXtract.min.js');
-impoerScripts('jsap.js');
+importScripts('jsap.js');
 
 var state = 0;
 var featureList;
@@ -22,7 +22,7 @@ function recursiveProcessing(base, list) {
     }
 }
 
-onmessage = function (message) {
+onmessage = function (message) { // eslint-disable-line  no-native-reassign
 
     // First message is the configuration for the featureLists
     if (message.data.state === 1 && state === 0) {
