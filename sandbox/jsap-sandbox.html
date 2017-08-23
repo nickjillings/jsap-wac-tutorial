@@ -72,6 +72,9 @@
             <span class="glyphicon glyphicon-ok" aria-hidden="true"></span><span>Your file is ready!</span>
         </div>
     </div>
+    <div>
+        <button type="button" class="btn btn-default" onclick="updateUI(event);"><span>Refresh Interface</span></button>
+    </div>
     <div id="plugin-frame">
         <div id="plugin-holder" ng-controller="plugins" style="width: {{framewidth}}px">
             <div class="plugin-meter" ng-controller="meter" ng-init="analyser = inputAnalyser">

@@ -32,6 +32,10 @@ chainEnd.connect(context.destination);
 var Factory = new PluginFactory(context);
 var chain = Factory.createSubFactory(chainStart, chainEnd);
 
+function updateUI(e) {
+    angular.element(document.querySelector("#plugin-holder")).scope().$apply();
+}
+
 function offlineRender(callback, buffer) {
     if (typeof callback !== "function") {
         throw ("Callback must be defined");

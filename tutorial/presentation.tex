@@ -94,7 +94,7 @@ These are all built for you on construction.
 \frametitle{Get JSAP}
 Please clone the following GitHub resource:\\
 \url{https://github.com/nickjillings/jsap-wac-tutorial}\\
-This will give you the latest JSAP, jsap-plugins and jsap-sandbox environments.\\
+This will give you the latest JSAP and resources for this tutorial.\\
 Then open the file \texttt{helloworld.js} in your editor.\\
 \end{frame}
 
@@ -327,8 +327,7 @@ HelloWorld.prototype.uniqueID = "JSHW";
 \item Your plugin is identified by the prototype.name, not the object name itself, to the end users
 \item Never modify outside the Modifiable line markers.
 \item You can hold multiple plugins in one script
-\item You can prototype plugins on plugins!
-\item You can load a plugin as an object (but you should define the plugin in your script to avoid race conditions).
+\item You can prototype plugins in plugins!
 \end{itemize}
 \end{frame}
 
@@ -336,7 +335,7 @@ HelloWorld.prototype.uniqueID = "JSHW";
 \frametitle{Building the Host}
 \begin{itemize}
 \item The host is the \texttt{PluginFactory}, called as such because it holds all the prototype objects and builds them.
-\item Plugins can either be built directly from the factory, such as for deployment into a fluid environment, or can be build into chains.
+\item Plugins can either be built directly from the factory, such as for deployment into a fluid environment, or into chains.
 \item These chains are called \texttt{SubFactories} and hold a start and end point, where plugins are inserted in-between.
 \end{itemize}
 \end{frame}
