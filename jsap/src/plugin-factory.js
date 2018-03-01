@@ -1,9 +1,9 @@
 // This defines a master object for holding all the plugins and communicating
 // This object will also handle creation and destruction of plugins
-/*globals Promise, document, console, LinkedStore, Worker, window */
+/*globals Promise, document, console, LinkedStore, Worker, window, XMLHttpRequest */
 /*eslint-env browser */
 
-var PluginFactory = function (context, dir) {
+var PluginFactory = function (context) {
 
     var audio_context = context,
         subFactories = [],
@@ -94,18 +94,36 @@ var PluginFactory = function (context, dir) {
 
     function loadResource(resourceObject) {
         return new Promise(function (resolve, reject) {
-            var script = document.createElement("script");
-            script.src = resourceObject.url;
-            document.getElementsByTagName("head")[0].appendChild(script);
-            script.onload = function () {
+            var xhr = new XMLHttpRequest();
+            var url = resourceObject.url;
+            if (url.startsWith("http") === false) {
+                url = dir + resourceObject.url;
+            }
+            if (resourceObject.test() === true) {
+                resolve(resourceObject);
+            }
+            console.log(url);
+            xhr.open("GET", url);
+            xhr.onload = function () {
+                var script = document.createElement("script");
+                script.textContent = xhr.responseText;
+                document.getElementsByTagName("head")[0].appendChild(script);
                 resolve(resourceObject);
             };
+            xhr.send();
         });
     }
 
-    if (dir === undefined) {
-        dir = "jsap/";
+    function copyFactory(newcontext) {
+        var BFactory = new PluginFactory(newcontext);
+        // Now copy in all of the plugin prototypes
+        plugin_prototypes.forEach(function (proto) {
+            BFactory.addPrototype(proto.proto);
+        });
+        return BFactory;
     }
+
+    var dir = "";
 
     var PluginInstance = function (id, plugin_node) {
         this.next_node = undefined;
@@ -150,9 +168,9 @@ var PluginFactory = function (context, dir) {
             if (this.next_node !== undefined) {
                 this.disconnect();
             }
-            if (new_next !== undefined && typeof new_next.getInputs === "function") {
+            if (new_next !== undefined && typeof new_next.node.getInputs === "function") {
                 this.next_node = new_next;
-                _out.connect(this.next_node.getInputs()[0]);
+                _out.connect(this.next_node.node.getInputs()[0]);
                 return true;
             }
             return false;
@@ -160,7 +178,7 @@ var PluginFactory = function (context, dir) {
 
         this.disconnect = function () {
             if (this.next_node !== undefined) {
-                _out.disconnect(this.next_node.getInputs()[0]);
+                _out.disconnect(this.next_node.node.getInputs()[0]);
                 this.next_node = undefined;
             }
         };
@@ -468,14 +486,7 @@ var PluginFactory = function (context, dir) {
         }
     };
 
-    Object.defineProperty(this, "context", {
-        'get': function () {
-            return audio_context;
-        },
-        'set': function () {}
-    });
-
-    this.FeatureMap = function () {
+    var FeatureMap = function () {
         var Mappings = [];
 
         var FeatureNode = function (node) {
@@ -783,7 +794,7 @@ var PluginFactory = function (context, dir) {
         };
     };
 
-    this.FeatureMap = new this.FeatureMap();
+    this.FeatureMap = new FeatureMap();
     Object.defineProperty(this.FeatureMap, "factory", {
         'value': this
     });
@@ -1215,4 +1226,26 @@ var PluginFactory = function (context, dir) {
             }
         });
     };
+    Object.defineProperties(this, {
+        "context": {
+            "value": audio_context
+        },
+        "pluginRootURL": {
+            "get": function () {
+                return dir;
+            },
+            "set": function (t) {
+                if (typeof t === "string") {
+                    dir = t;
+                    return dir;
+                }
+                throw ("Cannot set root URL without a string");
+            }
+        },
+        "createFactoryCopy": {
+            "value": function (context) {
+                return copyFactory(context);
+            }
+        }
+    });
 };
