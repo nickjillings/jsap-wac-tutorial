@@ -15,7 +15,8 @@ var BasePlugin = function (factory, owner) {
     this.context = factory.context;
     this.factory = factory;
     this.featureMap = new PluginFeatureInterface(this);
-    this.parameters = new ParameterManager(this);
+    this.externalInterface = new PluginInterfaceMessageHub(this);
+    this.parameters = new ParameterManager(this, this.externalInterface);
 
     function deleteIO(node, list) {
         var i = list.findIndex(function (e) {
@@ -149,7 +150,7 @@ var BasePlugin = function (factory, owner) {
     });
 };
 
-var ParameterManager = function (owner) {
+var ParameterManager = function (owner, pluginExternalInterface) {
     var parameterList = [];
 
     function findParameter(name) {
@@ -424,9 +425,9 @@ var ParameterManager = function (owner) {
             if (this.boundAudioParam) {
                 this.boundAudioParam.value = this.update(v);
             }
-            addAction(v);
-            this.trigger();
+            addAction.call(this, v);
             _value = v;
+            this.trigger();
             return v;
         }
 
@@ -459,25 +460,25 @@ var ParameterManager = function (owner) {
                     if (v > maxState) {
                         throw ("Set value is greater than " + maxState);
                     }
-                    return setV(v);
+                    return setV.call(this, v);
                 }
             },
             "increment": {
                 "value": function () {
-                    var v = _value++;
+                    var v = _value + 1;
                     if (v > maxState) {
                         v = minState;
                     }
-                    return setV(v);
+                    return setV.call(this, v);
                 }
             },
-            "deccrement": {
+            "decrement": {
                 "value": function () {
-                    var v = _value--;
+                    var v = _value - 1;
                     if (v < minState) {
                         v = maxState;
                     }
-                    return setV(v);
+                    return setV.call(this, v);
                 }
             }
         });
@@ -902,10 +903,14 @@ var PluginFeatureInterfaceSender = function (FeatureInterfaceInstance, FactoryFe
 /*
     This is an optional module which will attempt to create a graphical implementation.
     As with other audio plugins for DAWs, the GUI is an optional element which can be accepted or rejected by the host.
-    The same applies here as the underlying host will have to either accept or ignore the tools' GUI
+
+    The actual GUI is launched as an <iframe> element in the browser to keep each plugin isolated from the rest
 */
 
 var PluginUserInterface = function (BasePluginInstance, width, height) {
+    console.log("DEPRECATED!!");
+    console.log("The class PluginUserInterface has been deprecated");
+    console.log("Please look at the documents for the new methods for building plugins");
     this.processor = BasePluginInstance;
     this.root = document.createElement("div");
     if (width > 0) {
@@ -999,3 +1004,93 @@ PluginUserInterface.prototype.clearGUI = function () {
     this.stopCallbacks();
     this.root.innerHTML = "";
 };
+
+var PluginInterfaceMessageHub = function(owner) {
+    function dec2hex (dec) {
+        return ('0' + dec.toString(16)).substr(-2);
+    }
+    function generateId (len) {
+        var arr = new Uint8Array((len || 40) / 2);
+        window.crypto.getRandomValues(arr);
+        return Array.from(arr, dec2hex).join('');
+    }
+    function buildPluginParameterJSON(plugin) {
+        var names = owner.parameters.getParameterNames();
+        var O = {};
+        names.forEach(function(name) {
+            var param = owner.parameters.getParameterByName(name);
+            O[name] = {
+                value: param.value,
+                maximum: param.maximum,
+                minimum: param.minimum,
+                defaultValue: param.defaultValue,
+                type: param.constructor.name,
+                name: name
+            }
+        });
+        return O;
+    }
+    function getParameterMessage() {
+        var payload = buildPluginParameterJSON(owner);
+        channel.postMessage({
+            message: "update parameters",
+            parameters: JSON.stringify(payload)
+        });
+    }
+    function setParameterMessage(message) {
+        var parameters = JSON.parse(message.parameters)
+        Object.keys(parameters).forEach(function(name) {
+            owner.parameters.setParameterByName(name,parameters[name].value);
+        });
+    }
+    
+    var message_id = "jsap-ei-"+generateId(32);
+    
+    var channel = new BroadcastChannel(message_id);
+    var state = 0;
+    
+    channel.onmessage = function(e) {
+        switch(e.data.message) {
+            case "set parameters":
+                if (e.data.parameters) {
+                    setParameterMessage(e.data);
+                }
+                break;
+            case "get parameters":
+                getParameterMessage(e.data);
+                break;
+            case "update parameters":
+                return;
+            default:
+                throw("Unknown message type \""+e.data.message+"\"");
+        }
+    };
+    
+    Object.defineProperties(this, {
+        "updateInterfaces": {
+            "value": function() {
+                getParameterMessage();
+            }
+        },
+        "getMessageChannelID": {
+            "value": function() {
+                if (state === 0) {
+                    return message_id;
+                } else {
+                    throw("Cannel closed");
+                }
+            }
+        },
+        "closeChannel": {
+            value: function() {
+                if (state === 0) {
+                    channel.onmessage = undefined;
+                    channel.postMessage("close");
+                    channel.close();
+                } else {
+                    throw("Cannel already closed");
+                }
+            }
+        }
+    })
+}

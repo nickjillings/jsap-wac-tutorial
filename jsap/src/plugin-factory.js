@@ -3,9 +3,7 @@
 /*globals Promise, document, console, LinkedStore, Worker, window, XMLHttpRequest */
 /*eslint-env browser */
 
-var PluginFactory = function (context) {
-
-    var audio_context = context,
+var PluginFactory = function (audio_context, rootURL) {
         subFactories = [],
         plugin_prototypes = [],
         pluginsList = [],
@@ -93,22 +91,20 @@ var PluginFactory = function (context) {
     };
 
     function loadResource(resourceObject) {
+        if (resourceObject.url.startsWith("http") === false && rootURL !== undefined && rootURL.startsWith("http")) {
+            resourceObject.url = rootURL + resourceObject.url;
+        }
         return new Promise(function (resolve, reject) {
             var xhr = new XMLHttpRequest();
-            var url = resourceObject.url;
-            if (url.startsWith("http") === false) {
-                url = dir + resourceObject.url;
-            }
-            if (resourceObject.test() === true) {
-                resolve(resourceObject);
-            }
-            console.log(url);
-            xhr.open("GET", url);
-            xhr.onload = function () {
-                var script = document.createElement("script");
-                script.textContent = xhr.responseText;
-                document.getElementsByTagName("head")[0].appendChild(script);
-                resolve(resourceObject);
+            xhr.open("GET", resourceObject.url);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState == 4) {
+                    var script = document.createElement("script");
+                    script.textContent = xhr.responseText;
+                    document.getElementsByTagName("head")[0].appendChild(script);
+                    resolve(resourceObject);
+                }
+
             };
             xhr.send();
         });
@@ -122,8 +118,6 @@ var PluginFactory = function (context) {
         });
         return BFactory;
     }
-
-    var dir = "";
 
     var PluginInstance = function (id, plugin_node) {
         this.next_node = undefined;
@@ -211,8 +205,10 @@ var PluginFactory = function (context) {
             }
         });
     };
+    PluginInstance.prototype.factory = this;
 
-    var PluginPrototype = function (proto) {
+    var PluginPrototype = function (proto, factory) {
+	var self = this;
         Object.defineProperties(this, {
             'name': {
                 value: proto.prototype.name
@@ -228,42 +224,62 @@ var PluginFactory = function (context) {
             }
         });
 
-        this.createPluginInstance = function (owner) {
-            if (!this.ready) {
-                throw ("Plugin Not Read");
+        this.createPluginInstance = async function(owner, async) {
+            var p = createPluginInstance(owner);
+            if (async === true) {
+                return p;
+            } else {
+                await p;
+                return p;
             }
-            var plugin = new proto(this.factory, owner);
-            var node = new PluginInstance(currentPluginId++, plugin);
-            var basePluginInstance = plugin;
-            Object.defineProperties(plugin, {
-                'pluginInstance': {
-                    'value': node
-                },
-                'prototypeObject': {
-                    'value': this
-                },
-                'name': {
-                    value: proto.prototype.name
-                },
-                'version': {
-                    value: proto.prototype.version
-                },
-                'uniqueID': {
-                    value: proto.prototype.uniqueID
-                },
-                'SesionData': {
-                    value: this.factory.SessionData
-                },
-                'UserData': {
-                    value: this.factory.UserData
-                }
-            });
-            Object.defineProperty(node, "prototypeObject", {
-                'value': this
-            });
-            this.factory.registerPluginInstance(node);
-            return node;
         };
+
+        function createPluginInstance(owner) {
+            return new Promise(function(resolve, reject) {
+                if (!checkIsReady()) {
+                    reject(new Error("Plugin not ready"));
+                } else {
+                    resolve(new proto(factory, owner));
+                }
+            }).then(function(plugin) {
+                if (plugin.initialise) {
+                    return plugin.initialise();
+                } else {
+                    return plugin;
+                }
+            }).then(function(plugin) {
+                var node = new PluginInstance(currentPluginId++, plugin);
+                var basePluginInstance = plugin;
+                Object.defineProperties(plugin, {
+                    'pluginInstance': {
+                        'value': node
+                    },
+                    'prototypeObject': {
+                        'value': this
+                    },
+                    'name': {
+                        value: proto.prototype.name
+                    },
+                    'version': {
+                        value: proto.prototype.version
+                    },
+                    'uniqueID': {
+                        value: proto.prototype.uniqueID
+                    },
+                    'SesionData': {
+                        value: factory.SessionData
+                    },
+                    'UserData': {
+                        value: factory.UserData
+                    }
+                });
+                Object.defineProperty(node, "prototypeObject", {
+                    'value': self
+                });
+                factory.registerPluginInstance(node);
+                return node;
+            });
+        }
 
         function loadResourceChain(resourceObject, p) {
             if (!p) {
@@ -329,7 +345,7 @@ var PluginFactory = function (context) {
         this.getResourcePromises = function () {
             return resourcePromises;
         };
-        this.ready = function () {
+        function checkIsReady() {
             var state = true;
             for (var i = 0; i < resourcePromises.length; i++) {
                 if (resourcePromises[i].state !== 1 || !resourcePromises[i].test()) {
@@ -375,7 +391,7 @@ var PluginFactory = function (context) {
         if (obj) {
             throw ("The plugin must be unique!");
         }
-        obj = new PluginPrototype(plugin_proto);
+        obj = new PluginPrototype(plugin_proto, this);
         plugin_prototypes.push(obj);
         Object.defineProperties(obj, {
             'factory': {
@@ -457,7 +473,9 @@ var PluginFactory = function (context) {
             return p.id === id;
         });
         if (index >= 0) {
-            pluginsList.splice(index, 1);
+            var p = pluginsList.splice(index, 1);
+            this.PluginGUI.deleteAllPluginInterfaces(p[0].node);
+            p[0].node.externalInterface.closeChannel();
         }
     };
 
@@ -1104,13 +1122,17 @@ var PluginFactory = function (context) {
 
         // Plugin creation / destruction
 
-        this.createPlugin = function (prototypeObject) {
+        this.createPlugin = async function (prototypeObject) {
             var node, last_node;
             if (state === 0) {
                 throw ("SubFactory has been destroyed! Cannot add new plugins");
             }
             cutChain();
-            node = prototypeObject.createPluginInstance(this);
+            var promise = prototypeObject.createPluginInstance(this)
+            .then(function(n) {
+                node = n;
+            });
+            await promise;
             Object.defineProperties(node, {
                 'TrackData': {
                     value: this.TrackData
@@ -1226,18 +1248,58 @@ var PluginFactory = function (context) {
             }
         });
     };
+
+    var PluginUserInterfaceMessageHub = (function(factory){
+        function buildPluginInterface(plugin_object, interface_object) {
+            var key = plugin_object.externalInterface.getMessageChannelID();
+            var iframe = document.createElement("iframe");
+            iframe.src = interface_object.src;
+            if (interface_object.width) {
+                iframe.width = interface_object.width;
+            }
+            if (interface_object.height) {
+                iframe.height = interface_object.height;
+            }
+            iframe.style.border = "0";
+            iframe.setAttribute("data-jsap-key", key);
+            return iframe;
+        }
+        function setDefaultInterface(url, width, height) {
+            default_interface = {
+                url: url,
+                width: width,
+                height: height
+            };
+            return default_interface;
+        }
+        function pollAllPlugins() {
+            factory.getAllPlugins().forEach(function(plugin) {
+                plugin.node.externalInterface.updateInterfaces();
+            });
+        }
+        var default_interface = {
+            src: "jsap_default.html"
+        };
+
+        return Object.create({
+            "setDefaultInterface": setDefaultInterface,
+            "buildPluginInterface":buildPluginInterface,
+            "pollAllPlugins": pollAllPlugins
+        });
+    })(this);
+
     Object.defineProperties(this, {
         "context": {
             "value": audio_context
         },
         "pluginRootURL": {
             "get": function () {
-                return dir;
+                return rootURL;
             },
             "set": function (t) {
                 if (typeof t === "string") {
-                    dir = t;
-                    return dir;
+                    rootURL = t;
+                    return rootURL;
                 }
                 throw ("Cannot set root URL without a string");
             }
@@ -1246,6 +1308,9 @@ var PluginFactory = function (context) {
             "value": function (context) {
                 return copyFactory(context);
             }
+        },
+        "PluginGUI": {
+            "value": PluginUserInterfaceMessageHub
         }
     });
 };

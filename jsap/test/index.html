@@ -1,0 +1,27 @@
+<html>
+
+<head>
+    <script>
+        var exports = {};
+
+    </script>
+    <script src="https://cdn.rawgit.com/nickjillings/dummy-audio-context/master/audio-context.js"></script>
+    <script src="../jsap.js"></script>
+    <script>
+        var factory;
+        var keys = Object.keys(exports);
+        keys.forEach(function(p) {
+            if (exports.hasOwnProperty(p)) {
+                window[p] = exports[p];
+            }
+        });
+        var context = new AudioContext();
+        factory = new PluginFactory(context);
+
+        var a = context.createGain();
+        var b = context.createGain();
+
+    </script>
+</head>
+
+</html>
